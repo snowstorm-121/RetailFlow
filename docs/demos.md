@@ -44,7 +44,7 @@ DEMO_THREAD="demo-cancel-$(date +%Y%m%d-%H%M%S)"
 该脚本**不调用模型**。它直接调用 Agent 使用的真实 `RetailEnvironment` 和固定上游业务方法，创建独立输出目录，按下面顺序验证：
 
 1. 定位 Yara、查询订单，请求 `reason='ordered by mistake'` 的取消并记录确认，尚未执行写入。
-2. 助手只把输入参数 `reason` 改成 `no longer needed`，再次请求取消。
+2. 仅将输入参数 `reason` 改成 `no longer needed`，再次请求取消。
 3. 新请求必须生成不同 proposal_id。拿旧 ID 确认，必须得到 INVALID_CONFIRMATION；此时订单仍 pending，业务哈希未变。
 4. 明确确认新 ID 后取消才提交；重开存储重放同参数，必须取原回执，支付记录仍为 2 条。检查其他订单、用户、产品未改变。
 
