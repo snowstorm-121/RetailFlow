@@ -1,0 +1,42 @@
+{
+  "kind": "direct_application_guard_demo_no_model",
+  "steps": [
+    {
+      "event": "original_approved_not_executed",
+      "args": {
+        "order_id": "#W5056519",
+        "reason": "ordered by mistake"
+      },
+      "proposal_id": "f0cf42e918c045a19f515e342e93b532"
+    },
+    {
+      "event": "reason_changed",
+      "args": {
+        "order_id": "#W5056519",
+        "reason": "no longer needed"
+      },
+      "new_proposal_id": "f90906a164f64ff48a95f4328286a442",
+      "old_confirmation_result": {
+        "ok": false,
+        "code": "INVALID_CONFIRMATION",
+        "message": "Proposal does not match this session."
+      },
+      "business_unchanged": true
+    },
+    {
+      "event": "new_confirmation_committed_and_replayed",
+      "proposal_id": "f90906a164f64ff48a95f4328286a442",
+      "status": "cancelled",
+      "payment_history_count": 2,
+      "final_state_check": {
+        "passed": true,
+        "failures": []
+      },
+      "replay_did_not_write_again": true
+    }
+  ],
+  "state_hash_before": "f08162ba14d2d3ce9ebe4ebc0fa3cd4bdc2876eaaf9d3411802cdba96ea1f41a",
+  "state_hash_after": "af55ab6147e2573368bc122116adc54f0ac9641e1614e0f68bf21bc845e04f76",
+  "source_db_unchanged": true,
+  "not_a_benchmark_task": true
+}

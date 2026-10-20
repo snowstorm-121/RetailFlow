@@ -31,3 +31,9 @@
 
 - Added only a CLI preflight and `frozen.py` to enforce the registered environment before Test inference. The T7 launch manifest explicitly links the T6 parent and records this source delta; runtime, scorer, prompt, schema, script configuration and data remain byte-identical to T6.
 - Four existing Test tasks were run once per variant; all results, assistant-assisted communication reviews and actual traces are retained separately. No source business methods or frozen task labels were changed after observing Test. This is local derived evaluation, not an upstream leaderboard score.
+
+## T8: demonstration and disclosure
+
+- README, `docs/demos.md`, `docs/interview.md`, contribution and acceptance records explain existing behavior, negative metrics, source ownership and unresolved limits.
+- `examples/confirmation_change.py` is a direct real-business guard demonstration, with no model or benchmark task. Real-model CLI cancellation and policy explanation traces are separately labeled; no runtime, scorer, prompt, schemas, frozen data or upstream business code changed for T8.
+- T8 reuses the authorized local environment and model; no downloads or additional dependencies. Original-code license selection remains pending, with upstream MIT notices retained.

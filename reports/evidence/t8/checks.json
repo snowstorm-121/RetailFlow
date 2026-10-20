@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-20",
+  "purpose": "T8 demonstration, not benchmark or Test rerun",
+  "real_model_traces": 3,
+  "guard_demo_model_calls": 0,
+  "guard_demo_script": "examples/confirmation_change.py",
+  "guard_tests_command": ".venv/bin/python -m pytest tests/test_write_guard.py -k 'changed_parameters or invalid_new_target or reading_another_order or changed_return_item' -q",
+  "guard_tests": "4 passed, 9 deselected",
+  "source_db_sha256": "413a65160adbdb5fde0ffc0015c49b6d70250b10c18128de169b597af7766765",
+  "all_frozen_source_files_unchanged": true,
+  "guard_demo_runs": 2,
+  "guard_demo_notes": "Initial run and verification-only rerun after strengthening stored post-commit hash/payment assertions; no model calls, no failed run or prompt tuning. Both outputs retained.",
+  "guard_demo_artifacts": [
+    "artifacts/t8-guard/99a49d0fd7/result.json",
+    "artifacts/t8-guard/fde24206c6/result.json"
+  ],
+  "full_regression": "104 passed",
+  "dataset_validation": {
+    "dev": 9,
+    "test": 4,
+    "total": 13,
+    "errors": []
+  },
+  "readonly_review": "No actionable findings; documentation/evidence consistency and contribution boundaries checked; reviewer ran no models or tests.",
+  "frozen_t6_t7_evidence_unchanged": true
+}
