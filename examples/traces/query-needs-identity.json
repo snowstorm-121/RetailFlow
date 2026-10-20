@@ -1,0 +1,105 @@
+{
+  "thread_id": "t4-query-20261020-b",
+  "event": {
+    "kind": "message",
+    "text": "Please check order #W5056519. I have not provided my identity yet."
+  },
+  "status": "needs_input",
+  "text": "Could you please provide your email address, first name, last name, and ZIP code so I can locate your account and check order #W5056519?",
+  "request": {
+    "fields": [
+      "email",
+      "first_name",
+      "last_name",
+      "zip"
+    ],
+    "question": "Could you please provide your email address, first name, last name, and ZIP code so I can locate your account and check order #W5056519?"
+  },
+  "failure_reason": null,
+  "state_hash_before": "f08162ba14d2d3ce9ebe4ebc0fa3cd4bdc2876eaaf9d3411802cdba96ea1f41a",
+  "state_hash_after": "f08162ba14d2d3ce9ebe4ebc0fa3cd4bdc2876eaaf9d3411802cdba96ea1f41a",
+  "messages": [
+    {
+      "type": "human",
+      "data": {
+        "content": "Please check order #W5056519. I have not provided my identity yet.",
+        "additional_kwargs": {},
+        "response_metadata": {},
+        "type": "human",
+        "name": null,
+        "id": "b081251e-ab39-4813-8e17-24e00512c35f"
+      }
+    },
+    {
+      "type": "ai",
+      "data": {
+        "content": "",
+        "additional_kwargs": {},
+        "response_metadata": {
+          "model": "qwen3:4b-instruct-2507-q4_K_M",
+          "created_at": "2026-10-20T06:15:54.631206Z",
+          "done": true,
+          "done_reason": "stop",
+          "total_duration": 4464981375,
+          "load_duration": 67536084,
+          "prompt_eval_count": 807,
+          "prompt_eval_duration": 2801377958,
+          "eval_count": 72,
+          "eval_duration": 1577714511,
+          "logprobs": null,
+          "model_name": "qwen3:4b-instruct-2507-q4_K_M",
+          "model_provider": "ollama"
+        },
+        "type": "ai",
+        "name": null,
+        "id": "lc_run--01a157f3-ae8b-732f-9fe0-a2148e1c4299-0",
+        "tool_calls": [
+          {
+            "name": "ask_user",
+            "args": {
+              "fields": [
+                "email",
+                "first_name",
+                "last_name",
+                "zip"
+              ],
+              "question": "Could you please provide your email address, first name, last name, and ZIP code so I can locate your account and check order #W5056519?"
+            },
+            "id": "cf56fd42-3904-4585-a7c7-1cdb7f30fa19",
+            "type": "tool_call"
+          }
+        ],
+        "invalid_tool_calls": [],
+        "usage_metadata": {
+          "input_tokens": 807,
+          "output_tokens": 72,
+          "total_tokens": 879
+        }
+      }
+    },
+    {
+      "type": "tool",
+      "data": {
+        "content": "{\"ok\": true, \"code\": \"NEEDS_INPUT\", \"data\": {\"fields\": [\"email\", \"first_name\", \"last_name\", \"zip\"], \"question\": \"Could you please provide your email address, first name, last name, and ZIP code so I can locate your account and check order #W5056519?\"}}",
+        "additional_kwargs": {},
+        "response_metadata": {},
+        "type": "tool",
+        "name": "ask_user",
+        "id": "75786139-b1de-4625-80d1-820dc819a6c1",
+        "tool_call_id": "cf56fd42-3904-4585-a7c7-1cdb7f30fa19",
+        "artifact": null,
+        "status": "success"
+      }
+    }
+  ],
+  "usage": {
+    "model_calls": 1,
+    "tool_calls": 1,
+    "protocol_errors": 0,
+    "model_seconds": 4.481897999998182,
+    "tool_seconds": 9.832903742790222e-06,
+    "input_tokens": 807,
+    "output_tokens": 72
+  },
+  "elapsed_seconds": 4.538
+}
