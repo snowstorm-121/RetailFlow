@@ -136,6 +136,8 @@ def main() -> int:
     evaluation.add_argument("--config", type=Path, default=Path("configs/evaluation.json"))
     evaluation.add_argument("--output", type=Path)
     evaluation.add_argument("--limit", type=int)
+    evaluation.add_argument("--frozen", action="store_true")
+    evaluation.add_argument("--freeze-manifest", type=Path, default=Path("data/manifests/evaluation-t7.json"))
     args = parser.parse_args()
     if args.command == "smoke-model":
         return asyncio.run(smoke_model(args.config))
@@ -151,10 +153,23 @@ def main() -> int:
     if args.command == "evaluate":
         from retailflow.evaluation import evaluate_batch
 
+        if args.split == "test" and not args.frozen:
+            parser.error("Test evaluation requires --frozen")
+        if args.frozen and args.limit is not None:
+            parser.error("Frozen evaluation cannot use --limit")
+        if args.frozen:
+            from retailflow.frozen import verify_frozen
+
+            frozen = verify_frozen(args.config, args.freeze_manifest)
         os.environ["LANGSMITH_TRACING"] = "false"
         os.environ["LANGCHAIN_TRACING_V2"] = "false"
         output = args.output or Path("artifacts/t6") / (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:6])
         report = asyncio.run(evaluate_batch(args.split, args.variant, args.config, output, args.limit))
+        if args.frozen:
+            (output / "freeze-check.json").write_text(json.dumps({
+                "manifest": str(args.freeze_manifest), "manifest_sha256": frozen["manifest_sha256"],
+                "environment_sha256": frozen["environment"]["manifest_sha256"],
+            }, indent=2))
         print(json.dumps({"output": str(output), **report}, ensure_ascii=False, indent=2))
         return 0
     return 1
