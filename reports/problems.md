@@ -51,3 +51,11 @@
 ## P2 补充定位证据
 
 最终三组各 9 道 Dev 均未进入工具链。另开非 Test 的原生协议诊断：身份齐全时 3 次模型请求、2 次原生工具调用；身份缺失时 1 次请求、0 次工具调用。实际 HTTP 请求每次均携带九个工具 schema。证据在 `reports/evidence/t6/diagnostics/`，轨迹映射见 `trace-index.json`。这排除了“框架根本没有传工具”的解释，但不能把两个诊断视为九题评测的补考或增加成功数。问题仍未解决。
+
+## P5：Test 中 schema 合法但身份编造、协议错误
+
+三组 task 68 各有两个参数形状合法的原生工具请求，模型却自行编造 Jane Doe 邮箱/姓名/ZIP，并把说明文字与工具调用混发。既有协议保护在执行前两次返回 PROTOCOL_ERROR；最终仅追问身份，没有给出应查到的 $829.43。每组 task 51 另有一次身份定位前读订单请求，被 AUTH_REQUIRED 拦截。保护拒绝是真实发生的，不等于任务完成。
+
+定位与证据：见 T7 全部实际轨迹、`reports/evidence/t7/*/trace-audit.json` 及 `reports/t7-test.md`。每组三个参数/schema 合法请求全部被拦，成功 0/4，所有业务状态不变。`first_observed_error` 只记录 dispatcher attempt，因此 task 68 虽为 null，ToolMessage 仍记录两次协议错误，报告明确区分。
+
+本轮不修改冻结后的 prompt、运行逻辑或评分器；未把幻觉身份补成真实身份，也没有删掉协议规则来提高成功数。问题保持开放。任何后续修复需另建版本，不能再声称当前四道 Test 未见。

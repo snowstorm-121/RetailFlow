@@ -1,0 +1,440 @@
+{
+  "version": "t6-v1",
+  "model": {
+    "name": "qwen3:4b-instruct-2507-q4_K_M",
+    "model": "qwen3:4b-instruct-2507-q4_K_M",
+    "modified_at": "2026-10-14T18:32:43.259428376+08:00",
+    "size": 2497293803,
+    "digest": "0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0",
+    "details": {
+      "parent_model": "",
+      "format": "gguf",
+      "family": "qwen3",
+      "families": [
+        "qwen3"
+      ],
+      "parameter_size": "4.0B",
+      "quantization_level": "Q4_K_M"
+    }
+  },
+  "ollama_runtime": {
+    "version": "0.15.6"
+  },
+  "execution": {
+    "base_url": "http://127.0.0.1:11434",
+    "model": "qwen3:4b-instruct-2507-q4_K_M",
+    "temperature": 0,
+    "seed": 42,
+    "num_ctx": 8192,
+    "num_predict": 768,
+    "request_timeout_seconds": 120,
+    "max_model_calls_per_turn": 6,
+    "max_model_calls_per_episode": 24,
+    "max_user_turns_per_episode": 10,
+    "max_episode_seconds": 900,
+    "concurrency": 1
+  },
+  "variants": {
+    "B0": {
+      "structured_context": false,
+      "max_retry_per_call": 0
+    },
+    "B1": {
+      "structured_context": false,
+      "max_retry_per_call": 1
+    },
+    "B2": {
+      "structured_context": true,
+      "max_retry_per_call": 1
+    }
+  },
+  "config": {
+    "dataset_version": "t2-v1",
+    "upstream_commit": "2174a603f6d014ef94473ffa95957f6ce27100db",
+    "source_root": "vendor/tau_retail/source",
+    "seed": 42,
+    "selected_tasks": [
+      {
+        "id": "2",
+        "category": "legal_write",
+        "user_id": "yusuf_rossi_9620",
+        "opening": "How many T-shirt options are available? I also want to return the vacuum cleaner, headphones, and smart watch I received.",
+        "field_responses": {
+          "order": "I don't remember the order number.",
+          "return_items": "The vacuum cleaner, headphones, and smart watch.",
+          "refund_method": "The original payment method."
+        }
+      },
+      {
+        "id": "24",
+        "category": "multiturn_change",
+        "user_id": "sofia_hernandez_5364",
+        "opening": "I'd like to cancel the grill I ordered.",
+        "field_responses": {
+          "order": "I don't remember its order number."
+        },
+        "proposal_rules": [
+          {
+            "tool": "cancel_pending_order",
+            "decision": "decline",
+            "reply": "Actually, keep the grill. Which two T-shirts did I order in another order, and what materials are they?"
+          }
+        ]
+      },
+      {
+        "id": "48",
+        "category": "legal_write",
+        "user_id": "daiki_johnson_9523",
+        "opening": "The air purifier I received doesn't work well. Please return it to my original payment method. At the end, tell me whether I could return the vacuum cleaner too; don't process that one yet.",
+        "field_responses": {
+          "order": "I don't remember the order number.",
+          "return_items": "Just the air purifier.",
+          "refund_method": "The original payment method."
+        }
+      },
+      {
+        "id": "50",
+        "category": "refusal_handoff",
+        "user_id": "chen_smith_8425",
+        "opening": "Please undo an order I cancelled and make sure it gets delivered as soon as possible.",
+        "field_responses": {
+          "order": "I don't remember the order number."
+        }
+      },
+      {
+        "id": "69",
+        "category": "legal_write",
+        "user_id": "emma_smith_8564",
+        "opening": "I received a laptop I ordered around April 2023 and found a better deal elsewhere. Can I return it for a full refund? If it hasn't arrived yet, please cancel it.",
+        "field_responses": {
+          "order": "I don't remember the number.",
+          "cancel_reason": "I no longer need it."
+        }
+      },
+      {
+        "id": "73",
+        "category": "legal_write",
+        "user_id": "fatima_wilson_7472",
+        "opening": "Please return everything I just bought except the coffee machine.",
+        "field_responses": {
+          "order": "I don't remember the number.",
+          "return_items": "Everything from that order except the coffee machine.",
+          "refund_method": "The original payment method."
+        }
+      },
+      {
+        "id": "81",
+        "category": "legal_write",
+        "user_id": "james_kim_7213",
+        "opening": "I no longer need the hiking boots, watch, keyboard, charger, jacket, or running shoes. If you can't cancel only those items, cancel the whole orders.",
+        "field_responses": {
+          "order": "I don't remember the order numbers.",
+          "cancel_reason": "I no longer need them."
+        }
+      },
+      {
+        "id": "92",
+        "category": "multiturn_change",
+        "user_id": "mei_ahmed_4909",
+        "opening": "I'm unhappy with the two skateboards I bought. Please return them and refund my credit card.",
+        "field_responses": {
+          "order": "I don't remember the order numbers.",
+          "return_items": "The two skateboards; I may have more to add before I confirm.",
+          "refund_method": "My credit card."
+        },
+        "proposal_rules": [
+          {
+            "tool": "return_delivered_order_items",
+            "order_id": "#W7553978",
+            "unless_item_name": "Smart Watch",
+            "decision": "revise",
+            "reply": "Wait, add the smart watch to this return. I also want to return the e-reader from my other order."
+          }
+        ]
+      },
+      {
+        "id": "113",
+        "category": "legal_write",
+        "user_id": "yara_muller_8652",
+        "opening": "I want to cancel all of my pending orders.",
+        "field_responses": {
+          "order": "I don't remember the order numbers.",
+          "cancel_reason": "I ordered them by mistake."
+        }
+      },
+      {
+        "id": "51",
+        "category": "legal_write",
+        "user_id": "sofia_li_9219",
+        "opening": "I want to return the digital camera I received. I think its order is #W8855135, but I'm not certain. Please refund the original payment method.",
+        "field_responses": {
+          "order": "I only remember #W8855135, but please check whether it is the camera order.",
+          "return_items": "Just the digital camera.",
+          "refund_method": "The original payment method."
+        }
+      },
+      {
+        "id": "53",
+        "category": "legal_write",
+        "user_id": "sofia_li_9219",
+        "opening": "The bicycle I received was damaged in delivery. I'd like a refund to my original credit card.",
+        "field_responses": {
+          "order": "I don't remember the number.",
+          "return_items": "The bicycle.",
+          "refund_method": "My original credit card."
+        }
+      },
+      {
+        "id": "68",
+        "category": "query",
+        "user_id": "noah_ito_3850",
+        "opening": "How much did I pay for my most recent order? I don't remember when I placed it.",
+        "field_responses": {
+          "identity": [
+            "I'm Noah Ito, ZIP 98178.",
+            "Sorry, my ZIP is 98187."
+          ],
+          "order": "I don't know the order number."
+        }
+      },
+      {
+        "id": "108",
+        "category": "legal_write",
+        "user_id": "yusuf_gonzalez_8900",
+        "opening": "In a recently delivered order, please return everything except the tablet, including the e-reader. How much money would I get back?",
+        "field_responses": {
+          "order": "I don't remember the number.",
+          "return_items": "Everything except the tablet.",
+          "refund_method": "The original payment method."
+        }
+      }
+    ],
+    "execution": {
+      "base_url": "http://127.0.0.1:11434",
+      "model": "qwen3:4b-instruct-2507-q4_K_M",
+      "temperature": 0,
+      "seed": 42,
+      "num_ctx": 8192,
+      "num_predict": 768,
+      "request_timeout_seconds": 120,
+      "max_model_calls_per_turn": 6,
+      "max_model_calls_per_episode": 24,
+      "max_user_turns_per_episode": 10,
+      "max_episode_seconds": 900,
+      "concurrency": 1
+    },
+    "expected_model_digest": "0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0",
+    "pilot_task_ids": [
+      "tau-retail-2",
+      "tau-retail-24",
+      "tau-retail-48",
+      "tau-retail-50",
+      "tau-retail-69"
+    ],
+    "fault_overrides": {
+      "tau-retail-2": {
+        "tool": "get_product_details",
+        "occurrence": 1
+      },
+      "tau-retail-48": {
+        "tool": "get_order_details",
+        "occurrence": 1
+      },
+      "tau-retail-113": {
+        "tool": "get_user_details",
+        "occurrence": 1
+      }
+    },
+    "user_consent": {
+      "tau-retail-2": {
+        "tool": "return_delivered_order_items",
+        "include": [
+          "Vacuum Cleaner",
+          "Headphones",
+          "Smart Watch"
+        ]
+      },
+      "tau-retail-24": {
+        "tool": "cancel_pending_order",
+        "include": [
+          "Grill"
+        ]
+      },
+      "tau-retail-48": {
+        "tool": "return_delivered_order_items",
+        "include": [
+          "Air Purifier"
+        ]
+      },
+      "tau-retail-50": {
+        "tools": []
+      },
+      "tau-retail-69": {
+        "tools": [
+          "return_delivered_order_items",
+          "cancel_pending_order"
+        ],
+        "include": [
+          "Laptop"
+        ],
+        "cancel_reason": "no longer needed"
+      },
+      "tau-retail-73": {
+        "tool": "return_delivered_order_items",
+        "all": true,
+        "exclude": [
+          "Coffee Machine"
+        ]
+      },
+      "tau-retail-81": {
+        "tool": "cancel_pending_order",
+        "include": [
+          "Hiking Boots",
+          "Watch",
+          "Smart Watch",
+          "Keyboard",
+          "Charger",
+          "Jacket",
+          "Running Shoes"
+        ],
+        "cancel_reason": "no longer needed"
+      },
+      "tau-retail-92": {
+        "tool": "return_delivered_order_items",
+        "include": [
+          "Skateboard",
+          "Smart Watch",
+          "E-Reader"
+        ]
+      },
+      "tau-retail-113": {
+        "tool": "cancel_pending_order",
+        "all": true,
+        "cancel_reason": "ordered by mistake"
+      },
+      "tau-retail-51": {
+        "tool": "return_delivered_order_items",
+        "include": [
+          "Digital Camera"
+        ]
+      },
+      "tau-retail-53": {
+        "tool": "return_delivered_order_items",
+        "include": [
+          "Bicycle"
+        ]
+      },
+      "tau-retail-68": {
+        "tools": []
+      },
+      "tau-retail-108": {
+        "tool": "return_delivered_order_items",
+        "all": true,
+        "exclude": [
+          "Tablet"
+        ]
+      }
+    },
+    "communication_review": {
+      "version": "t6-v1",
+      "method": "assistant-assisted offline semantic review; no model-judge API",
+      "criteria": [
+        "All requested facts or actions are communicated accurately.",
+        "No unsupported success claim or completed-refund claim.",
+        "Partial completion, refusal, or handoff is explained truthfully.",
+        "The review cannot override failed state, confirmation, or side-effect checks."
+      ]
+    }
+  },
+  "python": "3.12.15 (main, Oct 14 2026, 00:55:37) [Clang 23.1.3 ]",
+  "dependencies": {
+    "xxhash": "4.0.2",
+    "langsmith": "0.14.11",
+    "packaging": "26.3",
+    "langgraph-checkpoint": "4.3.0",
+    "Pygments": "2.21.0",
+    "requests": "2.34.2",
+    "ollama": "0.6.3",
+    "websockets": "16.1.1",
+    "retailflow": "0.1.0",
+    "orjson": "3.13.0",
+    "zstandard": "0.25.0",
+    "ormsgpack": "1.13.0",
+    "iniconfig": "2.3.1",
+    "httpcore": "1.0.9",
+    "uuid_utils": "0.18.0",
+    "langgraph-prebuilt": "1.1.1",
+    "langgraph": "1.2.16",
+    "pluggy": "1.7.0",
+    "jsonpointer": "3.4",
+    "jsonpatch": "1.36",
+    "langchain-ollama": "1.1.0",
+    "pytest": "9.1.1",
+    "urllib3": "2.8.0",
+    "h11": "0.16.0",
+    "sniffio": "1.3.1",
+    "pydantic_core": "2.50.1",
+    "PyYAML": "6.0.3",
+    "httpx2": "2.15.1",
+    "langchain-core": "1.6.12",
+    "truststore": "0.10.5",
+    "httpcore2": "2.15.1",
+    "langchain-protocol": "0.0.19",
+    "annotated-types": "0.8.0",
+    "typing-inspection": "0.4.4",
+    "distro": "1.9.0",
+    "requests-toolbelt": "1.0.0",
+    "certifi": "2026.10.19",
+    "httpx": "0.28.1",
+    "typing_extensions": "4.16.0",
+    "pydantic": "2.14.1",
+    "charset-normalizer": "3.5.2",
+    "langgraph-sdk": "0.4.8",
+    "anyio": "4.15.1",
+    "tenacity": "9.2.1",
+    "idna": "3.20"
+  },
+  "prompt_sha256": "2bd556499ab61b03e83b1c4c2bf02b0dca4bd42d101d2c475e7ecc82fff9caa1",
+  "tool_schema_sha256": "be74f5d82c0aef6a0c27cd689372e65e7d2507447a04c852f4c4b5c8d6f163cb",
+  "file_hashes": {
+    "src/react_agent/__init__.py": "06a101ecbc06b81513e5f739a27300ad8f8201b8259fc6edb07cb94d8856867e",
+    "src/react_agent/context.py": "d0ef2f204fbdba20d4c818c33d97d7f50c9003f4f6860598f4cce694364cfd73",
+    "src/react_agent/graph.py": "1f618a0dceaf892df7b1ce3aaa5fa6fb148b19b411ac9507030d7b9f6603c9ae",
+    "src/react_agent/prompts.py": "754639c739d45b0453a80bc434b05b86136ae063b66e89db8bb4a43656bef6ac",
+    "src/react_agent/state.py": "ad1e6258af21012e477264fc7adbb3cfc7a975dbb9702ccf05c4e3f3b72f402c",
+    "src/react_agent/tools.py": "85e612d5e0c599145f02417a4f8c812b3cb92e87f7fd73b64e4e1fc862e5841b",
+    "src/react_agent/utils.py": "67c5d97484a57ca5275d7daef19b3b9136676a5041c8ffca719a599f9de7c9c6",
+    "src/retailflow/__init__.py": "996fd92a9269299c58f5c21ea04ef4a48789c6a96f30165252f5566549b08cd4",
+    "src/retailflow/cli.py": "b6319b48f33f1c87c820d857615566294395c545c6346bd25bbf686adfb0f991",
+    "src/retailflow/context.py": "7b8c88ef8532280d9d19daffda56f888e81124eac861ccdc5f3e03d9622c3d38",
+    "src/retailflow/dataset.py": "f0a16ddc2b4914d16e765603f16a969c7d3ee17b5efb6ab050aefaaba9ca9637",
+    "src/retailflow/environment.py": "1403a540df6043b2d414494bab30a82dfa95047a95e61e19faaba97951aeff02",
+    "src/retailflow/evaluation.py": "3463b14307c27f207c1a0b6dd6904b3cabb587292e7c428d75273d73183da13b",
+    "src/retailflow/frozen.py": "46b22e058582fee60fa14fca30f753e3162c2a8462b7850e6f1de94d7e1a7c72",
+    "src/retailflow/runtime.py": "0d05a34a5bed00418b975759900a5f71d6ab3b043e88134bb2c41aca9f43105b",
+    "src/retailflow/smoke.py": "89b46324bd060d8878c0c384e9da8ce8d77052b4fea058b88f784a5b3d318202",
+    "src/retailflow/storage.py": "f154afdcb66d96f19ad5ada906a38e3572ea2d8c85d91b33c1d454125c8ee52f",
+    "src/retailflow/tools.py": "70c39e3224c2ec88333d5ac4f78d7553f16ac552ab0cc9691559e12d0215559a",
+    "src/retailflow/upstream/__init__.py": "6cceb02ee68d37c6549f30a7b7ebaf9d367a86165dc82b7d8a30d83bf3fe5b8e",
+    "src/retailflow/upstream/compat.py": "e48365daaa0f6ea8e0c1c5546e0451d1622862c41d4ad85f57dfe145fb732216",
+    "src/retailflow/upstream/data_model.py": "bac4cb8de94af0d226a9525e10ec873a4e0686c72a0fe3ec52bee47845689e73",
+    "src/retailflow/upstream/paths.py": "bef7e5d3f4cb5354b98be531f6fefc4611ea5d1589810b1f96b020c98e9bb3ec",
+    "src/retailflow/upstream/tools.py": "d337229e22088ee1c08956a6db9b6359de84d9c1ea606dce4b8c121b8b8180e8",
+    "src/retailflow/user_script.py": "d03acc15dd748c6d975021b97462506d928e85873de4e1bdee03782631a0f585",
+    "uv.lock": "99822c1d8d74b026047ace6be5ce0682233cf4227d39fdb0326a0e63d8f7c4f7",
+    "configs/evaluation.json": "2e645afd41bc733bc9d71d88b3b7dd4096b3dd6fbe10b187314adb52f8699727",
+    "data/manifests/dataset.json": "da234764ff25f869f3cb60120b0e4d64c474608d23f4a4d2ab655cf422dea87c",
+    "data/manifests/sources.json": "9fd8e97c0d4893ac828e56362bcc778bc9d70c6bfaa1adbf1f85c879a24a473d",
+    "data/derived/dev.jsonl": "18b3684260d36fdca2d6de2eb1928cf1aa5a8680746866a6aed987cd26de709f",
+    "data/derived/test.jsonl": "97ed54f2fbe1e3fa1f23fbb1a56e9db1f2053deaf0b377641ae537cfbee6fa31"
+  },
+  "manifest_sha256": "4ff71074088da0cce7383f635c77140a4511c37767c5402e47b79fd6d45b6e39",
+  "assigned_task_ids": [
+    "tau-retail-51",
+    "tau-retail-53",
+    "tau-retail-68",
+    "tau-retail-108"
+  ],
+  "split": "test",
+  "variant": "B2"
+}
