@@ -17,5 +17,39 @@
     {"id": "53", "category": "legal_write", "user_id": "sofia_li_9219", "opening": "The bicycle I received was damaged in delivery. I'd like a refund to my original credit card.", "field_responses": {"order": "I don't remember the number.", "return_items": "The bicycle.", "refund_method": "My original credit card."}},
     {"id": "68", "category": "query", "user_id": "noah_ito_3850", "opening": "How much did I pay for my most recent order? I don't remember when I placed it.", "field_responses": {"identity": ["I'm Noah Ito, ZIP 98178.", "Sorry, my ZIP is 98187."], "order": "I don't know the order number."}},
     {"id": "108", "category": "legal_write", "user_id": "yusuf_gonzalez_8900", "opening": "In a recently delivered order, please return everything except the tablet, including the e-reader. How much money would I get back?", "field_responses": {"order": "I don't remember the number.", "return_items": "Everything except the tablet.", "refund_method": "The original payment method."}}
-  ]
+  ],
+  "execution": {
+    "base_url": "http://127.0.0.1:11434", "model": "qwen3:4b-instruct-2507-q4_K_M",
+    "temperature": 0, "seed": 42, "num_ctx": 8192, "num_predict": 768,
+    "request_timeout_seconds": 120, "max_model_calls_per_turn": 6,
+    "max_model_calls_per_episode": 24, "max_user_turns_per_episode": 10,
+    "max_episode_seconds": 900, "concurrency": 1
+  },
+  "expected_model_digest": "0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0",
+  "pilot_task_ids": ["tau-retail-2", "tau-retail-24", "tau-retail-48", "tau-retail-50", "tau-retail-69"],
+  "fault_overrides": {
+    "tau-retail-2": {"tool": "get_product_details", "occurrence": 1},
+    "tau-retail-48": {"tool": "get_order_details", "occurrence": 1},
+    "tau-retail-113": {"tool": "get_user_details", "occurrence": 1}
+  },
+  "user_consent": {
+    "tau-retail-2": {"tool": "return_delivered_order_items", "include": ["Vacuum Cleaner", "Headphones", "Smart Watch"]},
+    "tau-retail-24": {"tool": "cancel_pending_order", "include": ["Grill"]},
+    "tau-retail-48": {"tool": "return_delivered_order_items", "include": ["Air Purifier"]},
+    "tau-retail-50": {"tools": []},
+    "tau-retail-69": {"tools": ["return_delivered_order_items", "cancel_pending_order"], "include": ["Laptop"], "cancel_reason": "no longer needed"},
+    "tau-retail-73": {"tool": "return_delivered_order_items", "all": true, "exclude": ["Coffee Machine"]},
+    "tau-retail-81": {"tool": "cancel_pending_order", "include": ["Hiking Boots", "Watch", "Smart Watch", "Keyboard", "Charger", "Jacket", "Running Shoes"], "cancel_reason": "no longer needed"},
+    "tau-retail-92": {"tool": "return_delivered_order_items", "include": ["Skateboard", "Smart Watch", "E-Reader"]},
+    "tau-retail-113": {"tool": "cancel_pending_order", "all": true, "cancel_reason": "ordered by mistake"},
+    "tau-retail-51": {"tool": "return_delivered_order_items", "include": ["Digital Camera"]},
+    "tau-retail-53": {"tool": "return_delivered_order_items", "include": ["Bicycle"]},
+    "tau-retail-68": {"tools": []},
+    "tau-retail-108": {"tool": "return_delivered_order_items", "all": true, "exclude": ["Tablet"]}
+  },
+  "communication_review": {
+    "version": "t6-v1",
+    "method": "assistant-assisted offline semantic review; no model-judge API",
+    "criteria": ["All requested facts or actions are communicated accurately.", "No unsupported success claim or completed-refund claim.", "Partial completion, refusal, or handoff is explained truthfully.", "The review cannot override failed state, confirmation, or side-effect checks."]
+  }
 }

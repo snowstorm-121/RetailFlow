@@ -142,7 +142,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         budget = min(int(config.get("context_budget_tokens", available)), available)
         metrics["context_budget_tokens"] = budget
         try:
-            visible = build_model_context({**session, "messages": state["messages"]}, {"context_budget_tokens": budget})
+            visible = build_model_context({**session, "messages": state["messages"]},
+                                          {"context_budget_tokens": budget, "structured_context": config.get("structured_context", True)})
         except ContextBudgetExceeded:
             return {"status": "budget_exceeded", "failure_reason": "context_budget"}
         if before_model:
@@ -150,7 +151,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             if reason:
                 return {"status": "budget_exceeded", "failure_reason": reason}
         model = model_factory(runtime.context).bind_tools(RETAIL_TOOLS)
-        metrics["context_trimmed_messages"] = len(state["messages"]) - len(visible) + 1
+        metrics["context_trimmed_messages"] = len(state["messages"]) - len(visible) + int(config.get("structured_context", True))
         metrics["context_estimated_tokens"] = (len(prompt) + len(json.dumps(RETAIL_TOOLS)) +
                                                 len(json.dumps(messages_to_dict(visible), ensure_ascii=False))) // 4
         kept_ids = {message.id for message in visible if message.id}

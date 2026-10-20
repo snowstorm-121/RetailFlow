@@ -1,0 +1,207 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "find_user_id_by_email",
+      "description": "Find a retail user ID from their email address.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "find_user_id_by_name_zip",
+      "description": "Find a retail user ID from first name, last name, and ZIP code.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "zip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "first_name",
+          "last_name",
+          "zip"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_user_details",
+      "description": "Read the authenticated user's profile and payment methods.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_order_details",
+      "description": "Read one order after locating its owner. Preserve the leading # in an order ID such as #W5056519.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "pattern": "^#W[0-9]+$"
+          }
+        },
+        "required": [
+          "order_id"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_product_details",
+      "description": "Read product details by exact product ID.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "product_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "product_id"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "cancel_pending_order",
+      "description": "Stage a cancellation proposal for the authenticated user's pending order. The first call does NOT cancel; it returns a proposal for the application to confirm. Preserve the leading # in the order ID. Reason must be 'ordered by mistake' or 'no longer needed'.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "pattern": "^#W[0-9]+$"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "return_delivered_order_items",
+      "description": "Stage a return proposal for selected item IDs in the authenticated user's delivered order. The first call does NOT return items; it creates an application confirmation proposal. Preserve the leading # in the order ID.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "pattern": "^#W[0-9]+$"
+          },
+          "item_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "payment_method_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "item_ids",
+          "payment_method_id"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "transfer_to_human_agents",
+      "description": "Mark a request for human handoff when it cannot be handled by these tools. No human is contacted here.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "ask_user",
+      "description": "Request missing information and pause. Use this tool instead of a plain question. For a missing account identity use fields=['identity']. The registered field labels are identity, order, cancel_reason, return_items, refund_method.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fields",
+          "question"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+]

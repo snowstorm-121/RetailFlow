@@ -5,6 +5,7 @@ import asyncio
 import json
 import os
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -129,6 +130,12 @@ def main() -> int:
     retail_chat.add_argument("--thread", required=True)
     retail_chat.add_argument("--config", type=Path, default=Path("configs/local.json"))
     retail_chat.add_argument("--message")
+    evaluation = commands.add_parser("evaluate")
+    evaluation.add_argument("--split", required=True, choices=("dev", "test"))
+    evaluation.add_argument("--variant", required=True, choices=("B0", "B1", "B2"))
+    evaluation.add_argument("--config", type=Path, default=Path("configs/evaluation.json"))
+    evaluation.add_argument("--output", type=Path)
+    evaluation.add_argument("--limit", type=int)
     args = parser.parse_args()
     if args.command == "smoke-model":
         return asyncio.run(smoke_model(args.config))
@@ -141,6 +148,15 @@ def main() -> int:
         return 0 if result["valid"] else 1
     if args.command == "chat":
         return asyncio.run(chat(args.thread, args.config, args.message))
+    if args.command == "evaluate":
+        from retailflow.evaluation import evaluate_batch
+
+        os.environ["LANGSMITH_TRACING"] = "false"
+        os.environ["LANGCHAIN_TRACING_V2"] = "false"
+        output = args.output or Path("artifacts/t6") / (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:6])
+        report = asyncio.run(evaluate_batch(args.split, args.variant, args.config, output, args.limit))
+        print(json.dumps({"output": str(output), **report}, ensure_ascii=False, indent=2))
+        return 0
     return 1
 
 

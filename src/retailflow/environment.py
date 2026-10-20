@@ -32,6 +32,19 @@ def _business_error(exc):
     return _result("NOT_FOUND" if "not found" in message.lower() else "POLICY_DENIED", message)
 
 
+def _merge_model_changes(raw, before, after):
+    """Apply actual model changes without inserting unchanged schema defaults into raw JSON."""
+    for key in before.keys() - after.keys():
+        raw.pop(key, None)
+    for key, value in after.items():
+        if key in before and before[key] == value:
+            continue
+        if isinstance(value, dict) and isinstance(before.get(key), dict) and isinstance(raw.get(key), dict):
+            _merge_model_changes(raw[key], before[key], value)
+        else:
+            raw[key] = value
+
+
 class RetailEnvironment:
     def __init__(self, store_path: Path = Path("runtime/business.sqlite")):
         self.store_path = Path(store_path)
@@ -159,6 +172,12 @@ class RetailEnvironment:
                         return _result("TOOL_ERROR", f"{type(exc).__name__}: {exc}")
                     if not pending:
                         pending = {"proposal_id": uuid.uuid4().hex, "name": name, "args": args, "confirmed": False, "created_at": time.time()}
+                        order = business["orders"][args["order_id"]]
+                        selected = args.get("item_ids")
+                        pending["display"] = {"items": [{"name": item["name"], "item_id": item["item_id"]}
+                                                          for item in order["items"] if selected is None or item["item_id"] in selected],
+                                              "all_items": [{"name": item["name"], "item_id": item["item_id"]} for item in order["items"]],
+                                              "original_payment_method_id": order["payment_history"][0]["payment_method_id"]}
                         sql.execute("UPDATE sessions SET pending_json = ? WHERE thread = ?", (_json(pending), thread_id))
                     return {"ok": False, "code": "CONFIRMATION_REQUIRED", "proposal_id": pending["proposal_id"], "proposal": pending}
                 try:
@@ -171,7 +190,8 @@ class RetailEnvironment:
                 response = {"ok": True, "code": "OK", "data": result, "proposal_id": pending["proposal_id"]}
                 key = hashlib.sha256(f"{thread_id}:{pending['proposal_id']}:{name}:{arguments}".encode()).hexdigest()
                 sql.execute("INSERT INTO receipts(action_key, thread, name, args_json, result_json) VALUES (?, ?, ?, ?, ?)", (key, thread_id, name, arguments, _json(response)))
-                sql.execute("UPDATE sessions SET business_json = ?, pending_json = NULL WHERE thread = ?", (completed.model_dump_json(), thread_id))
+                _merge_model_changes(business, snapshot.model_dump(mode="json"), completed.model_dump(mode="json"))
+                sql.execute("UPDATE sessions SET business_json = ?, pending_json = NULL WHERE thread = ?", (_json(business), thread_id))
                 return response
             try:
                 result = invoke(snapshot, name, args)

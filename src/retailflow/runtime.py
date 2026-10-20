@@ -128,7 +128,13 @@ class RetailRuntime:
                     confirmed_outcome = outcome
                 messages.append(HumanMessage(content="I explicitly confirm the displayed proposal."))
                 action_name = pending["name"] if pending else "the previous action"
-                messages.append(SystemMessage(content=f"Application executed confirmed action {action_name}: {json.dumps(outcome, ensure_ascii=False)}"))
+                summary = {"name": action_name, "ok": outcome["ok"], "code": outcome["code"],
+                           "order_id": pending["args"]["order_id"] if pending else outcome.get("data", {}).get("order_id")}
+                if isinstance(outcome.get("data"), dict):
+                    summary["status"] = outcome["data"].get("status")
+                metrics["confirmed_result"] = outcome
+                messages.append(SystemMessage(content="Application outcome: " + json.dumps(summary, ensure_ascii=False),
+                                              additional_kwargs={"application_result": True}))
                 if not outcome["ok"]:
                     status, text = "failed", outcome.get("message", outcome["code"])
                     failure_reason = outcome["code"]
