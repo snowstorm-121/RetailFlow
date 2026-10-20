@@ -11,9 +11,12 @@ class Storage:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.transaction() as db:
             db.execute("CREATE TABLE IF NOT EXISTS sessions (thread TEXT PRIMARY KEY, business_json TEXT NOT NULL, user_id TEXT, pending_json TEXT)")
+            if "target_order_id" not in {row[1] for row in db.execute("PRAGMA table_info(sessions)")}:
+                db.execute("ALTER TABLE sessions ADD COLUMN target_order_id TEXT")
             db.execute("CREATE TABLE IF NOT EXISTS receipts (action_key TEXT PRIMARY KEY, thread TEXT NOT NULL, name TEXT NOT NULL, args_json TEXT NOT NULL, result_json TEXT NOT NULL)")
             db.execute("CREATE UNIQUE INDEX IF NOT EXISTS receipt_lookup ON receipts(thread, name, args_json)")
             db.execute("CREATE TABLE IF NOT EXISTS conversations (thread TEXT PRIMARY KEY, messages_json TEXT NOT NULL)")
+            db.execute("CREATE TABLE IF NOT EXISTS runtime_state (thread TEXT PRIMARY KEY, metadata_json TEXT NOT NULL)")
 
     @contextmanager
     def transaction(self):

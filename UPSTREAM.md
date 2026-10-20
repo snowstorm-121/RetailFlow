@@ -7,10 +7,11 @@
 - Obtained: 2026-10-20, from GitHub's commit-specific source archive; no upstream `.git` copied.
 - Archive SHA-256: `5a2bf10247ae654a83bbcfabb3e2990b49b6e14efe5c8c294bb9eea115d35f43`
 - Copied files: the seven files in `src/react_agent/` and `LICENSES/react-agent-MIT.txt`.
-- Unchanged template files: `__init__.py`, `state.py`, `prompts.py`.
+- Unchanged template files: `__init__.py`, `prompts.py`.
 - T1 edits: `graph.py` passes the local model context and records non-streaming HTTP results; `context.py` holds local settings; `utils.py` constructs `ChatOllama` and logs request/response JSON; `tools.py` replaces the example Tavily search with three local, read-only smoke tools.
 - The original template lists cloud model providers and Tavily. RetailFlow installs the dependencies in its own `pyproject.toml` and does not use those template integrations.
 - T4 edits: `graph.py` adds a separate retail `StateGraph` around the existing model/tool loop, with a guarded tool node for one-call execution and pause states; `state.py` adds `RetailState`; `tools.py` adds nine local retail tool schemas alongside the unchanged T1 smoke tools. `src/retailflow/runtime.py` and `cli.py` provide the application-side confirmation and CLI. The upstream template graph remains available for T1 checks.
+- T5 edits: the retail loop in `graph.py` uses a bounded context view, saves each model/tool step, enforces persisted episode budgets, and retries a known pre-execution read failure at most once. `tools.py` requires unique `ask_user.fields`; the same check is enforced at runtime. New `src/retailflow/context.py` and the application runtime/storage changes implement local context, session, and receipt recovery. No upstream retail business method or frozen source/data file changed.
 
 ## T2: tau2-bench retail business environment
 

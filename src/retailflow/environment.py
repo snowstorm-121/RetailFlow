@@ -15,6 +15,10 @@ from retailflow.upstream.paths import RETAIL_DB_PATH
 PROPOSAL_TTL_SECONDS = 900
 
 
+class PreExecutionTemporaryFailure(Exception):
+    """The tool did not start, so a read may be retried with identical arguments."""
+
+
 def _json(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -57,6 +61,27 @@ class RetailEnvironment:
             business = json.loads(self._session(db, thread_id)["business_json"])
         return hashlib.sha256(_json(business).encode()).hexdigest()
 
+    def load_session(self, thread_id: str) -> dict:
+        with self.storage.transaction() as db:
+            row = db.execute("SELECT * FROM sessions WHERE thread = ?", (thread_id,)).fetchone()
+            receipt = db.execute("SELECT name, result_json FROM receipts WHERE thread = ? ORDER BY rowid DESC LIMIT 1",
+                                 (thread_id,)).fetchone()
+        if row is None:
+            return {}
+        business = json.loads(row["business_json"])
+        target = business["orders"].get(row["target_order_id"], {})
+        return {"business": business, "user_id": row["user_id"],
+                "target_order_id": row["target_order_id"],
+                "target_order_status": target.get("status"),
+                "pending_action": self.pending_proposal(thread_id),
+                "last_receipt": {"name": receipt["name"], "result": json.loads(receipt["result_json"])} if receipt else None}
+
+    def receipt_for_proposal(self, thread_id: str, proposal_id: str):
+        with self.storage.transaction() as db:
+            row = db.execute("SELECT result_json FROM receipts WHERE thread = ? AND "
+                             "json_extract(result_json, '$.proposal_id') = ?", (thread_id, proposal_id)).fetchone()
+        return json.loads(row["result_json"]) if row else None
+
     def pending_proposal(self, thread_id: str):
         with self.storage.transaction() as db:
             pending = self._session(db, thread_id)["pending_json"]
@@ -65,6 +90,13 @@ class RetailEnvironment:
                 db.execute("UPDATE sessions SET pending_json = NULL WHERE thread = ?", (thread_id,))
                 return None
             return proposal
+
+    def invalidate_pending(self, thread_id: str) -> None:
+        with self.storage.transaction() as db:
+            row = self._session(db, thread_id)
+            pending = json.loads(row["pending_json"]) if row["pending_json"] else None
+            if pending:
+                db.execute("UPDATE sessions SET pending_json = NULL, target_order_id = NULL WHERE thread = ?", (thread_id,))
 
     def confirm_action(self, thread_id: str, proposal_id: str, accepted: bool) -> dict:
         if type(accepted) is not bool:
@@ -143,6 +175,8 @@ class RetailEnvironment:
                 return response
             try:
                 result = invoke(snapshot, name, args)
+            except PreExecutionTemporaryFailure as exc:
+                return _result("TEMPORARY_FAILURE", str(exc))
             except ValueError as exc:
                 return _result("NOT_FOUND", str(exc))
             except Exception as exc:
@@ -154,6 +188,8 @@ class RetailEnvironment:
                     return _result("POLICY_DENIED", "This session is bound to one user.")
                 if not user_id:
                     sql.execute("UPDATE sessions SET user_id = ? WHERE thread = ?", (result, thread_id))
+            if name == "get_order_details":
+                sql.execute("UPDATE sessions SET target_order_id = ? WHERE thread = ?", (args["order_id"], thread_id))
             return {"ok": True, "code": "OK", "data": result}
 
 

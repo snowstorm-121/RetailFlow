@@ -13,7 +13,7 @@ from langchain_core.messages import messages_to_dict
 from react_agent.context import Context
 from react_agent.graph import graph
 from retailflow.dataset import prepare_dataset, validate_dataset
-from retailflow.runtime import run_turn
+from retailflow.runtime import RetailRuntime, run_turn
 from retailflow.smoke import CASES, evaluate_case
 
 
@@ -65,8 +65,23 @@ async def chat(thread_id: str, config_path: Path, message: str | None = None) ->
     os.environ["LANGSMITH_TRACING"] = "false"
     os.environ["LANGCHAIN_TRACING_V2"] = "false"
     next_text = message
+    resume_event = None
+    if message is None:
+        session = RetailRuntime(Path(config.get("store_path", "runtime/business.sqlite")),
+                                Path(config.get("trace_dir", "artifacts/t4"))).load_session(thread_id)
+        pending = session.get("pending_action")
+        if pending:
+            print(f"Pending {pending['name']} with {json.dumps(pending['args'], ensure_ascii=False)}")
+            try:
+                choice = input("Confirm this exact pending action? Type yes or no: ").strip().lower()
+            except EOFError:
+                return 0
+            if choice not in {"yes", "no"}:
+                print("No confirmation submitted. The proposal remains pending.")
+                return 0
+            resume_event = {"kind": "confirmation", "proposal_id": pending["proposal_id"], "accepted": choice == "yes"}
     while True:
-        if next_text is None:
+        if next_text is None and resume_event is None:
             try:
                 next_text = input("You (or /quit): ").strip()
             except EOFError:
@@ -76,7 +91,9 @@ async def chat(thread_id: str, config_path: Path, message: str | None = None) ->
             if not next_text:
                 next_text = None
                 continue
-        result = await run_turn(thread_id, {"kind": "message", "text": next_text}, config)
+        event = resume_event or {"kind": "message", "text": next_text}
+        resume_event = None
+        result = await run_turn(thread_id, event, config)
         next_text = None
         while True:
             print(f"[{result['status']}] {result['text']}")

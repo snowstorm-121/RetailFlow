@@ -41,6 +41,8 @@ def _schema(name, fields, description):
     properties = {}
     for key, kind in fields.items():
         properties[key] = {"type": "array", "items": {"type": "string"}} if kind is list else {"type": "string"}
+        if name == "ask_user" and key == "fields":
+            properties[key]["uniqueItems"] = True
         if key == "order_id":
             properties[key]["pattern"] = "^#W[0-9]+$"
     return {"type": "function", "function": {"name": name, "description": description, "parameters": {

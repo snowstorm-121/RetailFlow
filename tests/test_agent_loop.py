@@ -79,6 +79,20 @@ def test_ask_user_pauses_and_next_message_resumes(tmp_path):
     assert len([m for m in worker.load_messages("a") if isinstance(m, ToolMessage)]) == 2
 
 
+def test_ask_user_schema_rejects_duplicate_requested_fields(tmp_path):
+    from react_agent.tools import RETAIL_TOOLS
+
+    schema = next(tool for tool in RETAIL_TOOLS if tool["function"]["name"] == "ask_user")
+    assert schema["function"]["parameters"]["properties"]["fields"]["uniqueItems"] is True
+    worker, _, config = runtime(tmp_path, [
+        call("ask_user", {"fields": ["zip", "zip"], "question": "ZIP?"}, "a1"),
+        AIMessage(content="I need one ZIP."),
+    ])
+    result = asyncio.run(worker.run_turn("a", {"kind": "message", "text": "Find me"}, config))
+    assert result["status"] == "answered"
+    assert json.loads(worker.load_messages("a")[-2].content)["code"] == "INVALID_ARGUMENT"
+
+
 def test_multiple_calls_are_rejected_without_partial_execution(tmp_path):
     worker, _, config = runtime(tmp_path, [
         AIMessage(content="", tool_calls=[
