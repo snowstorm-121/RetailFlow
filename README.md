@@ -10,7 +10,6 @@
   <a href="#quickstart"><img src="https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&amp;logo=python&amp;logoColor=white" alt="参考环境 Python 3.12"></a>
   <a href="#architecture"><img src="https://img.shields.io/badge/Orchestration-LangGraph-0F766E?style=flat-square" alt="LangGraph 工具循环"></a>
   <a href="#configuration"><img src="https://img.shields.io/badge/Runtime-Ollama-111827?style=flat-square" alt="本地 Ollama"></a>
-  <a href="#verification"><img src="https://img.shields.io/badge/Local%20tests-129%20passed-15803D?style=flat-square" alt="本地已记录测试结果 129 passed，非 CI 状态"></a>
   <a href="#limitations"><img src="https://img.shields.io/badge/Status-Experimental-D97706?style=flat-square" alt="实验原型"></a>
 </p>
 
@@ -18,7 +17,6 @@
   <a href="#quickstart">快速开始</a> ·
   <a href="#demo">业务演示</a> ·
   <a href="#architecture">架构与机制</a> ·
-  <a href="#evaluation">评测结果</a> ·
   <a href="#documentation">文档索引</a>
 </p>
 
@@ -27,7 +25,7 @@ RetailFlow 是一个本地运行的多轮零售业务执行 Agent。它基于 [L
 项目关注的是业务执行边界：模型可以提出操作，但不能替用户确认；写入必须绑定具体提案与参数；进程恢复时应能判断操作是否已经提交；评测需要检查最终业务状态，而不是只看回复是否流畅。
 
 > [!IMPORTANT]
-> 当前仍是实验原型。现有 4B 的最新修复版 V5 完整 Dev 为 **1/9**，V4 为 **2/9**，效果尚不稳定。修复前的固定三组 Dev 均 **0/9**、Test 均 **0/4**，原始记录保留。129 个工程测试和单例演示不代表业务任务成功率。详见[评测结果](#evaluation)和[修复报告](reports/repair-native-dialogue.md)。
+> 当前仍是实验原型。仓库提供可运行的业务链路、评测代码与原始实验记录；演示不代表复杂业务任务的可靠性承诺。
 
 <a id="features"></a>
 ## 能做什么
@@ -90,7 +88,7 @@ curl -sS http://127.0.0.1:11434/api/version
   --message 'I am Yara Muller, ZIP 85041. What is the status of order #W5056519?'
 ```
 
-校验结果应为 Dev 9 / Test 4 / Total 13，`valid: true`。这个查询提供了完整身份信息，适合先检查本地模型和工具链；缺信息开场的交互可靠性仍是已知问题。业务数据与工具描述为英文，演示请求也使用英文。
+数据校验应返回 `valid: true`。这个查询提供了完整身份信息，适合先检查本地模型和工具链；缺信息开场的交互可靠性仍是已知问题。业务数据与工具描述为英文，演示请求也使用英文。
 
 交互模式省略 `--message`，输入 `/quit` 退出。每次独立演示使用新的 `--thread`；相同 ID 会恢复原会话，不会重置订单。
 
@@ -118,9 +116,7 @@ Confirm this exact action? Type yes or no:
 核对订单号和原因后输入 `yes`；不匹配则输入 `no`。不能因为模型说了“已创建提案”就认定提案确实存在，也不能因为最终文本说“取消成功”就跳过状态核验。
 
 <details>
-<summary><strong>实际演示记录与跨进程恢复</strong></summary>
-
-2026-10-20 的真实本地运行中，首个 CLI 在待确认处以 EOF 退出；第二个进程使用相同 thread 恢复提案，核对并确认后，订单由 pending 变为 cancelled，支付历史由 1 条变为 2 条，完整末态检查通过。最终答复说明信用卡退款需 5–7 个工作日，没有称已到账。
+<summary><strong>跨进程恢复操作</strong></summary>
 
 在提案提示处按 Ctrl-D 退出后，可在同一终端用以下命令恢复：
 
@@ -130,8 +126,6 @@ Confirm this exact action? Type yes or no:
 ```
 
 恢复时不要传新 `--message`：普通新消息会撤销尚未提交的提案。会话和提案预算均为 15 分钟量级，过期需新会话。
-
-证据：[提案与确认轨迹映射](reports/evidence/t8/trace-index.json) · [取消末态检查](reports/evidence/t8/cancel-check.json)。
 
 </details>
 
@@ -217,7 +211,7 @@ CLI 与评测都调用 `RetailRuntime.run_turn`；模型决定下一步工具，
 | `temperature` / `seed` | `0` / `42` | 固定采样设置，不保证跨环境逐字一致 |
 | `num_ctx` / `num_predict` | `8192` / `768` | 模型上下文窗口 / 输出上限 |
 | `request_timeout_seconds` | `120` | 单次模型请求超时 |
-| `max_model_calls_per_turn` | `12` | 当前 CLI 默认；原始冻结实验显式为 6，新修复实验为 12 |
+| `max_model_calls_per_turn` | `12` | 当前 CLI 默认；具体配置文件可显式覆盖 |
 | `max_model_calls_per_episode` | `24` | 会话累计模型请求上限 |
 | `max_user_turns_per_episode` | `10` | 含确认事件的用户事件上限 |
 | `max_episode_seconds` | `900` | 墙钟预算，包含进程退出期间 |
@@ -226,115 +220,6 @@ CLI 与评测都调用 `RetailRuntime.run_turn`；模型决定下一步工具，
 | `trace_dir` | `artifacts/t4` | 未指定时的历史默认轨迹目录 |
 
 进程重启不会重置会话预算。不同演示可使用自己的 store/trace 配置文件或新 thread；不要删除已有数据库来“恢复”任务。服务端全局环境变量也可能影响模型适配器，正式复现应使用清洁、明确的本地配置。
-
-<a id="evaluation"></a>
-## 数据、评测与实测结果
-
-### 任务构造与成功标准
-
-当前任务集只有 **13 道**：Dev 9 / Test 4。Test 覆盖 3 个源用户组，其中 2 题属于同一用户；同源分组不跨 Dev/Test。原计划的 80 道任务是未达成目标，没有通过重复运行凑题数。
-
-每题使用独立初始业务状态。模型只接收当前消息与允许的上下文；用户脚本只回答登记的缺失字段和当前提案；评分器最后检查：
-
-- 订单和退款/退货状态是否准确达到目标。
-- 是否有必要确认，其他订单、用户和产品是否出现禁止副作用。
-- 必要查询结果、拒绝或转交是否真的发生，答复是否准确完整。
-
-客观状态通过后，必要沟通仍按登记 rubric 单独复核。语义复核采用辅助离线检查，并保留决策、原因与原始条目哈希，不冒称独立人工标注。`answered` 只代表产生了结束答复，批命令退出码 0 只代表运行记录完成。
-
-### 三组对照
-
-| 变体 | 最近完整消息块 | 关键状态与工具结果裁剪 | 执行前只读临时故障重试 |
-| --- | --- | --- | --- |
-| B0 | 是 | 否 | 0 次 |
-| B1 | 是 | 否 | 最多 1 次 |
-| B2 | 是 | 是 | 最多 1 次 |
-
-模型、数据、保护层、确认规则和预算相同，三组依次运行。基础身份和确认状态是共有安全边界，不会为了做 B0 而移除。
-
-### 原始冻结结果（修复前）
-
-| 指标 | B0 | B1 | B2 |
-| --- | ---: | ---: | ---: |
-| Dev 端到端成功 | 0/9 | 0/9 | 0/9 |
-| Test 端到端成功 | 0/4 | 0/4 | 0/4 |
-| Test 合法写任务状态/确认通过 | 0/3 | 0/3 | 0/3 |
-| Test 参数/schema 合法工具请求 | 3/3 | 3/3 | 3/3 |
-| Test 拦截请求数 | 3 | 3 | 3 |
-| Test 观察到实际违规任务 | 0/4 | 0/4 | 0/4 |
-| Test 故障恢复 | 0/0，未定义 | 0/0，未定义 | 0/0，未定义 |
-
-Test 每组三次请求拦截分别为 1 次 `AUTH_REQUIRED` 和 2 次 `PROTOCOL_ERROR`。参数类型与形状合法，不等于身份信息真实、调用协议允许或业务目标完成。三组相较均多完成 0 题、相差 0 个百分点；没有可报告的成功率提升。
-
-Dev 中模型经常直接文字追问身份，没有调用 `ask_user`；Test 查询中还出现了编造示例身份、工具请求混合说明文字的情况。保护层阻止了错误执行，但没有完成任务。Dev 预登记的三个故障未触发，Test 未设置故障任务，因此没有恢复收益证据，也没有长上下文收益结论。
-
-详见 [Dev 报告](reports/t6-dev.md)、[Test 报告](reports/t7-test.md)、[机器可读汇总](reports/results.json)和[真实问题记录](reports/problems.md)。这是本地派生评测，不是官方 τ2-bench 排行榜成绩。
-
-### 后续修复开发验证
-
-2026-10-21 的当前源码 `56431ce` 使用现有 `qwen3:4b-instruct-2507-q4_K_M`，没有下载或切换模型。五轮开发验证均完整分配同样的 9 道 Dev，累计 45 次运行，不是 45 道任务。
-
-| 开发版本（B2） | 端到端成功 | 写任务状态/确认通过 |
-| --- | ---: | ---: |
-| V1 | 0/9 | 0/7 |
-| V2 | 0/9 | 1/7 |
-| V3 | 0/9 | 2/7 |
-| V4 | 2/9 | 2/7 |
-| **V5（当前）** | **1/9** | **1/7** |
-
-V5 正确完成了 laptop 取消、确认和礼品卡即时退款；组合查询、退货和多订单任务仍失败。V4 曾完成额外的查询任务，但后续上下文修复没有带来稳定的整题提升，因此不能只展示 V4。所有原始记录、复核、源码快照和末态核验均保留，待复核 **0**。详见[修复报告](reports/repair-native-dialogue.md)、[最新机器汇总](reports/repair-results.json)与[V5 复核结果](reports/evidence/repair/dev-v5/reviewed-report.json)。
-
-这轮增加了原生协议反馈、身份来源检查、真实执行摘要，并修正了用户脚本的独立缺陷；单轮预算也从 6 改为 12。因此它是 Dev 开发结果，不能将新结果与旧 0/9 当作预算一致的单变量提升，也不能证明上下文或重试各自的收益。已见 Test 没有重跑。
-
-<details>
-<summary><strong>运行评测与检查冻结版本</strong></summary>
-
-Dev 可用于新实验，但应使用新输出目录；以下命令会真实调用本机模型：
-
-```bash
-.venv/bin/python -m retailflow.cli evaluate \
-  --split dev --variant B0 \
-  --config configs/repair-v5.json \
-  --output artifacts/my-dev-B0
-```
-
-正式 Test 强制 `--frozen`，拒绝 `--limit`：
-
-```bash
-.venv/bin/python -m retailflow.cli evaluate \
-  --split test --variant B0 --frozen \
-  --output artifacts/test/my-run/B0
-```
-
-B1、B2 依次替换变体与输出目录。已有 `results.jsonl` 不会被覆盖；三次运行同一题不增加独立题数。原始结果不自动视为全部语义评分完成，需保留单独复核记录。
-
-默认检查 [evaluation-t7.json](data/manifests/evaluation-t7.json)：模型 digest、运行时、依赖、配置、源文件、prompt、schema 和数据必须匹配。新机器即便业务行为相同，也可能因 Python 构建/依赖元数据不同而被拒绝；应另登记复现版本，不能改旧清单后继续称同一冻结。Test 输出已经被看过，未来据此调参不能再把这些题视为未见数据。
-
-后续修复改变了运行源码；当前源码不能通过旧 T7 冻结检查，历史表格对应当时的版本。新开发验证使用 `configs/repair-v5.json`，不是沿用旧冻结成绩。
-
-原始实验与执行轨迹保留不变。T8 文档持续更新，其最初交付版本可按[文档快照映射](reports/evidence/t8/document-snapshots.json)解析原始 manifest 的文档条目；实验数据和实际轨迹仍使用原路径与哈希。
-
-</details>
-
-<a id="verification"></a>
-## 测试与核验
-
-```bash
-.venv/bin/python -m pytest -q
-.venv/bin/python -m retailflow.cli validate --manifest data/manifests/dataset.json
-```
-
-最近一次本地回归记录为 **129 passed**。顶部徽章是静态实测快照，不是 GitHub Actions 状态或覆盖率徽章。
-
-| 工程检查 | 代表内容 |
-| --- | --- |
-| 工具与权限 | 白名单、参数、身份/所有权、非法状态不执行 |
-| 写保护 | 拒绝、过期、跨线程、参数变化、重新确认、回执重放 |
-| 上下文与恢复 | 完整工具块、最新意图、预算持久化、写后回复超时 |
-| 数据与评分 | 分组不泄漏、独立状态、目标/副作用反例、失败分母不丢失 |
-| 冻结入口 | 未冻结/部分 Test 拒绝，配置/代码/运行环境漂移拒绝 |
-
-确定性测试使用脚本模型验证特定路径，真实模型调用与评测结果另存。工程测试通过说明这些约束在已测场景有效，不意味着模型会可靠完成任务。
 
 <a id="troubleshooting"></a>
 ## 故障排查
@@ -397,8 +282,6 @@ RetailFlow/
 | 理解数据流与关键代码 | [技术讲解与代码追问](docs/interview.md) |
 | 核对上游与新增部分 | [来源与二开贡献](reports/contribution.md) · [逐项适配清单](UPSTREAM.md) |
 | 核对工程完成范围 | [验收记录](reports/acceptance.md) |
-| 查看正式评测 | [Dev](reports/t6-dev.md) · [Test](reports/t7-test.md) · [JSON 汇总](reports/results.json) |
-| 阅读失败案例 | [真实问题记录](reports/problems.md) · [实际轨迹](examples/traces/) |
 | 追溯来源与冻结 | [数据与环境清单](data/manifests/) · [Test 预登记协议](reports/t7-protocol.md) |
 
 <a id="limitations"></a>
