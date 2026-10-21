@@ -10,7 +10,7 @@
   <a href="#quickstart"><img src="https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&amp;logo=python&amp;logoColor=white" alt="参考环境 Python 3.12"></a>
   <a href="#architecture"><img src="https://img.shields.io/badge/Orchestration-LangGraph-0F766E?style=flat-square" alt="LangGraph 工具循环"></a>
   <a href="#configuration"><img src="https://img.shields.io/badge/Runtime-Ollama-111827?style=flat-square" alt="本地 Ollama"></a>
-  <a href="#verification"><img src="https://img.shields.io/badge/Local%20tests-104%20passed-15803D?style=flat-square" alt="本地已记录测试结果 104 passed，非 CI 状态"></a>
+  <a href="#verification"><img src="https://img.shields.io/badge/Local%20tests-129%20passed-15803D?style=flat-square" alt="本地已记录测试结果 129 passed，非 CI 状态"></a>
   <a href="#limitations"><img src="https://img.shields.io/badge/Status-Experimental-D97706?style=flat-square" alt="实验原型"></a>
 </p>
 
@@ -27,7 +27,7 @@ RetailFlow 是一个本地运行的多轮零售业务执行 Agent。它基于 [L
 项目关注的是业务执行边界：模型可以提出操作，但不能替用户确认；写入必须绑定具体提案与参数；进程恢复时应能判断操作是否已经提交；评测需要检查最终业务状态，而不是只看回复是否流畅。
 
 > [!IMPORTANT]
-> 当前版本是可审计的工程原型，模型业务效果仍未达标。固定 Dev 对照 B0/B1/B2 均为 **0/9**，固定 Test 均为 **0/4**。仓库同时保留成功演示、失败轨迹与原始评测记录；单例演示和 104 个工程测试不代表业务任务成功率。详见[评测结果](#evaluation)。
+> 当前仍是实验原型。现有 4B 的最新修复版 V5 完整 Dev 为 **1/9**，V4 为 **2/9**，效果尚不稳定。修复前的固定三组 Dev 均 **0/9**、Test 均 **0/4**，原始记录保留。129 个工程测试和单例演示不代表业务任务成功率。详见[评测结果](#evaluation)和[修复报告](reports/repair-native-dialogue.md)。
 
 <a id="features"></a>
 ## 能做什么
@@ -217,7 +217,7 @@ CLI 与评测都调用 `RetailRuntime.run_turn`；模型决定下一步工具，
 | `temperature` / `seed` | `0` / `42` | 固定采样设置，不保证跨环境逐字一致 |
 | `num_ctx` / `num_predict` | `8192` / `768` | 模型上下文窗口 / 输出上限 |
 | `request_timeout_seconds` | `120` | 单次模型请求超时 |
-| `max_model_calls_per_turn` | `6` | 每个用户事件最多模型请求数 |
+| `max_model_calls_per_turn` | `12` | 当前 CLI 默认；原始冻结实验显式为 6，新修复实验为 12 |
 | `max_model_calls_per_episode` | `24` | 会话累计模型请求上限 |
 | `max_user_turns_per_episode` | `10` | 含确认事件的用户事件上限 |
 | `max_episode_seconds` | `900` | 墙钟预算，包含进程退出期间 |
@@ -252,7 +252,7 @@ CLI 与评测都调用 `RetailRuntime.run_turn`；模型决定下一步工具，
 
 模型、数据、保护层、确认规则和预算相同，三组依次运行。基础身份和确认状态是共有安全边界，不会为了做 B0 而移除。
 
-### 冻结结果
+### 原始冻结结果（修复前）
 
 | 指标 | B0 | B1 | B2 |
 | --- | ---: | ---: | ---: |
@@ -270,6 +270,22 @@ Dev 中模型经常直接文字追问身份，没有调用 `ask_user`；Test 查
 
 详见 [Dev 报告](reports/t6-dev.md)、[Test 报告](reports/t7-test.md)、[机器可读汇总](reports/results.json)和[真实问题记录](reports/problems.md)。这是本地派生评测，不是官方 τ2-bench 排行榜成绩。
 
+### 后续修复开发验证
+
+2026-10-21 的当前源码 `56431ce` 使用现有 `qwen3:4b-instruct-2507-q4_K_M`，没有下载或切换模型。五轮开发验证均完整分配同样的 9 道 Dev，累计 45 次运行，不是 45 道任务。
+
+| 开发版本（B2） | 端到端成功 | 写任务状态/确认通过 |
+| --- | ---: | ---: |
+| V1 | 0/9 | 0/7 |
+| V2 | 0/9 | 1/7 |
+| V3 | 0/9 | 2/7 |
+| V4 | 2/9 | 2/7 |
+| **V5（当前）** | **1/9** | **1/7** |
+
+V5 正确完成了 laptop 取消、确认和礼品卡即时退款；组合查询、退货和多订单任务仍失败。V4 曾完成额外的查询任务，但后续上下文修复没有带来稳定的整题提升，因此不能只展示 V4。所有原始记录、复核、源码快照和末态核验均保留，待复核 **0**。详见[修复报告](reports/repair-native-dialogue.md)、[最新机器汇总](reports/repair-results.json)与[V5 复核结果](reports/evidence/repair/dev-v5/reviewed-report.json)。
+
+这轮增加了原生协议反馈、身份来源检查、真实执行摘要，并修正了用户脚本的独立缺陷；单轮预算也从 6 改为 12。因此它是 Dev 开发结果，不能将新结果与旧 0/9 当作预算一致的单变量提升，也不能证明上下文或重试各自的收益。已见 Test 没有重跑。
+
 <details>
 <summary><strong>运行评测与检查冻结版本</strong></summary>
 
@@ -278,7 +294,7 @@ Dev 可用于新实验，但应使用新输出目录；以下命令会真实调�
 ```bash
 .venv/bin/python -m retailflow.cli evaluate \
   --split dev --variant B0 \
-  --config configs/evaluation.json \
+  --config configs/repair-v5.json \
   --output artifacts/my-dev-B0
 ```
 
@@ -294,6 +310,8 @@ B1、B2 依次替换变体与输出目录。已有 `results.jsonl` 不会被覆�
 
 默认检查 [evaluation-t7.json](data/manifests/evaluation-t7.json)：模型 digest、运行时、依赖、配置、源文件、prompt、schema 和数据必须匹配。新机器即便业务行为相同，也可能因 Python 构建/依赖元数据不同而被拒绝；应另登记复现版本，不能改旧清单后继续称同一冻结。Test 输出已经被看过，未来据此调参不能再把这些题视为未见数据。
 
+后续修复改变了运行源码；当前源码不能通过旧 T7 冻结检查，历史表格对应当时的版本。新开发验证使用 `configs/repair-v5.json`，不是沿用旧冻结成绩。
+
 原始实验与执行轨迹保留不变。T8 文档持续更新，其最初交付版本可按[文档快照映射](reports/evidence/t8/document-snapshots.json)解析原始 manifest 的文档条目；实验数据和实际轨迹仍使用原路径与哈希。
 
 </details>
@@ -306,7 +324,7 @@ B1、B2 依次替换变体与输出目录。已有 `results.jsonl` 不会被覆�
 .venv/bin/python -m retailflow.cli validate --manifest data/manifests/dataset.json
 ```
 
-最近一次本地回归记录为 **104 passed**。顶部徽章是静态实测快照，不是 GitHub Actions 状态或覆盖率徽章。
+最近一次本地回归记录为 **129 passed**。顶部徽章是静态实测快照，不是 GitHub Actions 状态或覆盖率徽章。
 
 | 工程检查 | 代表内容 |
 | --- | --- |
@@ -329,7 +347,9 @@ B1、B2 依次替换变体与输出目录。已有 `results.jsonl` 不会被覆�
 | 找不到固定模型 | `ollama list` 中完整标签与 digest | 不自动下载、不静默换模型 |
 | `AUTH_REQUIRED` | 查询前是否已定位当前用户 | 不伪造身份绕过 |
 | `NOT_FOUND` | ID 是否正确，订单号是否保留 `#` | 需澄清，不能随机换他人订单 |
-| `PROTOCOL_ERROR` | 是否多工具调用或工具请求混合用户可见文本 | schema 合法不等于协议合法 |
+| `PROTOCOL_ERROR` | 是否一次请求多个工具 | 当前允许说明文字与单个原生调用并存，文字不提供确认权限 |
+| `MISSING_USER_INFORMATION` | 身份参数是否来自实际用户消息 | 不允许从示例或模型猜测中取得身份 |
+| `information_request_not_structured` | 有限重试后是否仍未原生调用 `ask_user` | 不自动把普通问句转换为工具调用 |
 | `INVALID_CONFIRMATION` | ID、参数、thread 是否匹配，提案是否过期 | 生成新提案并重新确认 |
 | `budget_exceeded` | 本轮/会话/上下文/时间预算 | 重启不会重置预算；新任务使用新 thread |
 | 写入成功但模型超时 | 回执、实际订单状态与支付记录 | 不因回复失败再次退款 |

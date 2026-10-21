@@ -1,0 +1,1070 @@
+{
+  "version": "repair-summary-v1",
+  "date": "2026-10-21",
+  "latest": "repair-v5",
+  "source_commit": "56431ce",
+  "model": "qwen3:4b-instruct-2507-q4_K_M",
+  "scope": "Seen Dev development, B2 only; changed scripts and budgets, not a matched causal comparison or an unseen benchmark. No new Test runs.",
+  "unique_dev_tasks": 9,
+  "development_episode_runs": 45,
+  "test_rerun": false,
+  "tests_passed": 129,
+  "latest_reviewed_metrics": {
+    "n_assigned": 9,
+    "n_success": 1,
+    "task_success_rate": 0.1111111111111111,
+    "n_pending_reviews": 0,
+    "state_modification": {
+      "numerator": 1,
+      "denominator": 7,
+      "unknown": 0
+    },
+    "refusal_handoff": {
+      "numerator": 0,
+      "denominator": 1
+    },
+    "blocked_requests": 0,
+    "legal_tool_calls": {
+      "numerator": 44,
+      "denominator": 44
+    },
+    "actual_violations": {
+      "numerator": 0,
+      "denominator": 9,
+      "unknown": 0
+    },
+    "recovery": {
+      "numerator": 0,
+      "denominator": 2,
+      "registered_but_untriggered": 1,
+      "trigger_state_unknown": 0
+    },
+    "by_category": {
+      "legal_write": {
+        "n_assigned": 6,
+        "n_success": 1
+      },
+      "multiturn_change": {
+        "n_assigned": 2,
+        "n_success": 0
+      },
+      "refusal_handoff": {
+        "n_assigned": 1,
+        "n_success": 0
+      }
+    },
+    "failure_reasons": {
+      "proposal_not_created": 2,
+      "communication_failure": 1,
+      "missing_confirmation": 2,
+      "transfer_mismatch": 1,
+      "information_request_not_structured": 2
+    },
+    "failure_categories": {
+      "budget_environment": 4,
+      "communication": 1,
+      "tool_exception": 1,
+      "model_no_tool": 1,
+      "model_decision_or_communication": 1
+    },
+    "efficiency": {
+      "all": {
+        "elapsed_seconds": {
+          "n": 9,
+          "median": 63.931,
+          "p95": 128.242
+        },
+        "model_calls": {
+          "n": 9,
+          "median": 7,
+          "p95": 13
+        },
+        "tool_calls": {
+          "n": 9,
+          "median": 7,
+          "p95": 9
+        },
+        "retries": {
+          "n": 9,
+          "median": 0,
+          "p95": 1
+        },
+        "dialogue_repairs": {
+          "n": 9,
+          "median": 1,
+          "p95": 3
+        },
+        "input_tokens": {
+          "n": 9,
+          "median": 14208,
+          "p95": 31028
+        },
+        "output_tokens": {
+          "n": 9,
+          "median": 399,
+          "p95": 1054
+        }
+      },
+      "success": {
+        "elapsed_seconds": {
+          "n": 1,
+          "median": 74.441,
+          "p95": 74.441
+        },
+        "model_calls": {
+          "n": 1,
+          "median": 9,
+          "p95": 9
+        },
+        "tool_calls": {
+          "n": 1,
+          "median": 8,
+          "p95": 8
+        },
+        "retries": {
+          "n": 1,
+          "median": 0,
+          "p95": 0
+        },
+        "dialogue_repairs": {
+          "n": 1,
+          "median": 1,
+          "p95": 1
+        },
+        "input_tokens": {
+          "n": 1,
+          "median": 17115,
+          "p95": 17115
+        },
+        "output_tokens": {
+          "n": 1,
+          "median": 399,
+          "p95": 399
+        }
+      },
+      "failed": {
+        "elapsed_seconds": {
+          "n": 8,
+          "median": 62.5325,
+          "p95": 128.242
+        },
+        "model_calls": {
+          "n": 8,
+          "median": 7.0,
+          "p95": 13
+        },
+        "tool_calls": {
+          "n": 8,
+          "median": 6.0,
+          "p95": 9
+        },
+        "retries": {
+          "n": 8,
+          "median": 0.0,
+          "p95": 1
+        },
+        "dialogue_repairs": {
+          "n": 8,
+          "median": 1.0,
+          "p95": 3
+        },
+        "input_tokens": {
+          "n": 8,
+          "median": 14164.0,
+          "p95": 31028
+        },
+        "output_tokens": {
+          "n": 8,
+          "median": 411.0,
+          "p95": 1054
+        }
+      }
+    },
+    "n_planned": 9,
+    "run_complete": true
+  },
+  "runs": {
+    "dev-pilot-v1": {
+      "report": "reports/evidence/repair/dev-pilot-v1/report.json",
+      "metrics": {
+        "n_assigned": 9,
+        "n_success": 0,
+        "task_success_rate": 0.0,
+        "n_pending_reviews": 0,
+        "state_modification": {
+          "numerator": 0,
+          "denominator": 7,
+          "unknown": 0
+        },
+        "refusal_handoff": {
+          "numerator": 0,
+          "denominator": 1
+        },
+        "blocked_requests": 2,
+        "legal_tool_calls": {
+          "numerator": 30,
+          "denominator": 30
+        },
+        "actual_violations": {
+          "numerator": 0,
+          "denominator": 9,
+          "unknown": 0
+        },
+        "recovery": {
+          "numerator": 0,
+          "denominator": 1,
+          "registered_but_untriggered": 2,
+          "trigger_state_unknown": 0
+        },
+        "by_category": {
+          "legal_write": {
+            "n_assigned": 6,
+            "n_success": 0
+          },
+          "multiturn_change": {
+            "n_assigned": 2,
+            "n_success": 0
+          },
+          "refusal_handoff": {
+            "n_assigned": 1,
+            "n_success": 0
+          }
+        },
+        "failure_reasons": {
+          "information_request_not_structured": 6,
+          "transfer_mismatch": 1,
+          "missing_confirmation": 2
+        },
+        "failure_categories": {
+          "budget_environment": 6,
+          "model_no_tool": 1,
+          "model_decision_or_communication": 1,
+          "tool_exception": 1
+        },
+        "efficiency": {
+          "all": {
+            "elapsed_seconds": {
+              "n": 9,
+              "median": 35.915,
+              "p95": 48.975
+            },
+            "model_calls": {
+              "n": 9,
+              "median": 6,
+              "p95": 7
+            },
+            "tool_calls": {
+              "n": 9,
+              "median": 4,
+              "p95": 7
+            },
+            "retries": {
+              "n": 9,
+              "median": 0,
+              "p95": 1
+            },
+            "dialogue_repairs": {
+              "n": 9,
+              "median": 1,
+              "p95": 2
+            },
+            "input_tokens": {
+              "n": 9,
+              "median": 9684,
+              "p95": 11084
+            },
+            "output_tokens": {
+              "n": 9,
+              "median": 235,
+              "p95": 488
+            }
+          },
+          "success": {
+            "elapsed_seconds": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            },
+            "model_calls": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            },
+            "tool_calls": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            },
+            "retries": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            },
+            "dialogue_repairs": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            },
+            "input_tokens": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            },
+            "output_tokens": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            }
+          },
+          "failed": {
+            "elapsed_seconds": {
+              "n": 9,
+              "median": 35.915,
+              "p95": 48.975
+            },
+            "model_calls": {
+              "n": 9,
+              "median": 6,
+              "p95": 7
+            },
+            "tool_calls": {
+              "n": 9,
+              "median": 4,
+              "p95": 7
+            },
+            "retries": {
+              "n": 9,
+              "median": 0,
+              "p95": 1
+            },
+            "dialogue_repairs": {
+              "n": 9,
+              "median": 1,
+              "p95": 2
+            },
+            "input_tokens": {
+              "n": 9,
+              "median": 9684,
+              "p95": 11084
+            },
+            "output_tokens": {
+              "n": 9,
+              "median": 235,
+              "p95": 488
+            }
+          }
+        },
+        "n_planned": 9,
+        "run_complete": true
+      }
+    },
+    "dev-pilot-v2": {
+      "report": "reports/evidence/repair/dev-pilot-v2/reviewed-report.json",
+      "metrics": {
+        "n_assigned": 9,
+        "n_success": 0,
+        "task_success_rate": 0.0,
+        "n_pending_reviews": 0,
+        "state_modification": {
+          "numerator": 1,
+          "denominator": 7,
+          "unknown": 0
+        },
+        "refusal_handoff": {
+          "numerator": 0,
+          "denominator": 1
+        },
+        "blocked_requests": 0,
+        "legal_tool_calls": {
+          "numerator": 36,
+          "denominator": 36
+        },
+        "actual_violations": {
+          "numerator": 0,
+          "denominator": 9,
+          "unknown": 0
+        },
+        "recovery": {
+          "numerator": 0,
+          "denominator": 2,
+          "registered_but_untriggered": 1,
+          "trigger_state_unknown": 0
+        },
+        "by_category": {
+          "legal_write": {
+            "n_assigned": 6,
+            "n_success": 0
+          },
+          "multiturn_change": {
+            "n_assigned": 2,
+            "n_success": 0
+          },
+          "refusal_handoff": {
+            "n_assigned": 1,
+            "n_success": 0
+          }
+        },
+        "failure_reasons": {
+          "information_request_not_structured": 3,
+          "communication_failure": 2,
+          "model_call_budget": 1,
+          "transfer_mismatch": 1,
+          "proposal_not_created": 1,
+          "missing_confirmation": 1
+        },
+        "failure_categories": {
+          "budget_environment": 5,
+          "communication": 2,
+          "model_no_tool": 1,
+          "tool_exception": 1
+        },
+        "efficiency": {
+          "all": {
+            "elapsed_seconds": {
+              "n": 9,
+              "median": 50.439,
+              "p95": 105.383
+            },
+            "model_calls": {
+              "n": 9,
+              "median": 6,
+              "p95": 13
+            },
+            "tool_calls": {
+              "n": 9,
+              "median": 7,
+              "p95": 10
+            },
+            "retries": {
+              "n": 9,
+              "median": 0,
+              "p95": 1
+            },
+            "dialogue_repairs": {
+              "n": 9,
+              "median": 1,
+              "p95": 2
+            },
+            "input_tokens": {
+              "n": 9,
+              "median": 10713,
+              "p95": 25100
+            },
+            "output_tokens": {
+              "n": 9,
+              "median": 201,
+              "p95": 640
+            }
+          },
+          "success": {
+            "elapsed_seconds": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            },
+            "model_calls": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            },
+            "tool_calls": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            },
+            "retries": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            },
+            "dialogue_repairs": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            },
+            "input_tokens": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            },
+            "output_tokens": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            }
+          },
+          "failed": {
+            "elapsed_seconds": {
+              "n": 9,
+              "median": 50.439,
+              "p95": 105.383
+            },
+            "model_calls": {
+              "n": 9,
+              "median": 6,
+              "p95": 13
+            },
+            "tool_calls": {
+              "n": 9,
+              "median": 7,
+              "p95": 10
+            },
+            "retries": {
+              "n": 9,
+              "median": 0,
+              "p95": 1
+            },
+            "dialogue_repairs": {
+              "n": 9,
+              "median": 1,
+              "p95": 2
+            },
+            "input_tokens": {
+              "n": 9,
+              "median": 10713,
+              "p95": 25100
+            },
+            "output_tokens": {
+              "n": 9,
+              "median": 201,
+              "p95": 640
+            }
+          }
+        },
+        "n_planned": 9,
+        "run_complete": true
+      }
+    },
+    "dev-v3": {
+      "report": "reports/evidence/repair/dev-v3/reviewed-report.json",
+      "metrics": {
+        "n_assigned": 9,
+        "n_success": 0,
+        "task_success_rate": 0.0,
+        "n_pending_reviews": 0,
+        "state_modification": {
+          "numerator": 2,
+          "denominator": 7,
+          "unknown": 0
+        },
+        "refusal_handoff": {
+          "numerator": 0,
+          "denominator": 1
+        },
+        "blocked_requests": 0,
+        "legal_tool_calls": {
+          "numerator": 47,
+          "denominator": 47
+        },
+        "actual_violations": {
+          "numerator": 0,
+          "denominator": 9,
+          "unknown": 0
+        },
+        "recovery": {
+          "numerator": 0,
+          "denominator": 2,
+          "registered_but_untriggered": 1,
+          "trigger_state_unknown": 0
+        },
+        "by_category": {
+          "legal_write": {
+            "n_assigned": 6,
+            "n_success": 0
+          },
+          "multiturn_change": {
+            "n_assigned": 2,
+            "n_success": 0
+          },
+          "refusal_handoff": {
+            "n_assigned": 1,
+            "n_success": 0
+          }
+        },
+        "failure_reasons": {
+          "information_request_not_structured": 1,
+          "communication_failure": 3,
+          "transfer_mismatch": 1,
+          "missing_confirmation": 3,
+          "proposal_not_created": 1
+        },
+        "failure_categories": {
+          "budget_environment": 2,
+          "communication": 3,
+          "model_no_tool": 1,
+          "model_decision_or_communication": 2,
+          "tool_exception": 1
+        },
+        "efficiency": {
+          "all": {
+            "elapsed_seconds": {
+              "n": 9,
+              "median": 62.729,
+              "p95": 129.929
+            },
+            "model_calls": {
+              "n": 9,
+              "median": 8,
+              "p95": 11
+            },
+            "tool_calls": {
+              "n": 9,
+              "median": 6,
+              "p95": 10
+            },
+            "retries": {
+              "n": 9,
+              "median": 0,
+              "p95": 1
+            },
+            "dialogue_repairs": {
+              "n": 9,
+              "median": 1,
+              "p95": 2
+            },
+            "input_tokens": {
+              "n": 9,
+              "median": 12322,
+              "p95": 24746
+            },
+            "output_tokens": {
+              "n": 9,
+              "median": 402,
+              "p95": 675
+            }
+          },
+          "success": {
+            "elapsed_seconds": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            },
+            "model_calls": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            },
+            "tool_calls": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            },
+            "retries": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            },
+            "dialogue_repairs": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            },
+            "input_tokens": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            },
+            "output_tokens": {
+              "n": 0,
+              "median": null,
+              "p95": null
+            }
+          },
+          "failed": {
+            "elapsed_seconds": {
+              "n": 9,
+              "median": 62.729,
+              "p95": 129.929
+            },
+            "model_calls": {
+              "n": 9,
+              "median": 8,
+              "p95": 11
+            },
+            "tool_calls": {
+              "n": 9,
+              "median": 6,
+              "p95": 10
+            },
+            "retries": {
+              "n": 9,
+              "median": 0,
+              "p95": 1
+            },
+            "dialogue_repairs": {
+              "n": 9,
+              "median": 1,
+              "p95": 2
+            },
+            "input_tokens": {
+              "n": 9,
+              "median": 12322,
+              "p95": 24746
+            },
+            "output_tokens": {
+              "n": 9,
+              "median": 402,
+              "p95": 675
+            }
+          }
+        },
+        "n_planned": 9,
+        "run_complete": true
+      }
+    },
+    "dev-v4": {
+      "report": "reports/evidence/repair/dev-v4/reviewed-report.json",
+      "metrics": {
+        "n_assigned": 9,
+        "n_success": 2,
+        "task_success_rate": 0.2222222222222222,
+        "n_pending_reviews": 0,
+        "state_modification": {
+          "numerator": 2,
+          "denominator": 7,
+          "unknown": 0
+        },
+        "refusal_handoff": {
+          "numerator": 0,
+          "denominator": 1
+        },
+        "blocked_requests": 0,
+        "legal_tool_calls": {
+          "numerator": 45,
+          "denominator": 45
+        },
+        "actual_violations": {
+          "numerator": 0,
+          "denominator": 9,
+          "unknown": 0
+        },
+        "recovery": {
+          "numerator": 0,
+          "denominator": 2,
+          "registered_but_untriggered": 1,
+          "trigger_state_unknown": 0
+        },
+        "by_category": {
+          "legal_write": {
+            "n_assigned": 6,
+            "n_success": 1
+          },
+          "multiturn_change": {
+            "n_assigned": 2,
+            "n_success": 1
+          },
+          "refusal_handoff": {
+            "n_assigned": 1,
+            "n_success": 0
+          }
+        },
+        "failure_reasons": {
+          "communication_failure": 1,
+          "missing_confirmation": 3,
+          "transfer_mismatch": 1,
+          "information_request_not_structured": 1,
+          "proposal_not_created": 1
+        },
+        "failure_categories": {
+          "communication": 1,
+          "tool_exception": 1,
+          "model_no_tool": 1,
+          "budget_environment": 2,
+          "model_decision_or_communication": 2
+        },
+        "efficiency": {
+          "all": {
+            "elapsed_seconds": {
+              "n": 9,
+              "median": 75.446,
+              "p95": 153.867
+            },
+            "model_calls": {
+              "n": 9,
+              "median": 8,
+              "p95": 14
+            },
+            "tool_calls": {
+              "n": 9,
+              "median": 7,
+              "p95": 11
+            },
+            "retries": {
+              "n": 9,
+              "median": 0,
+              "p95": 1
+            },
+            "dialogue_repairs": {
+              "n": 9,
+              "median": 1,
+              "p95": 3
+            },
+            "input_tokens": {
+              "n": 9,
+              "median": 15191,
+              "p95": 35396
+            },
+            "output_tokens": {
+              "n": 9,
+              "median": 426,
+              "p95": 1229
+            }
+          },
+          "success": {
+            "elapsed_seconds": {
+              "n": 2,
+              "median": 90.8295,
+              "p95": 99.814
+            },
+            "model_calls": {
+              "n": 2,
+              "median": 9.5,
+              "p95": 10
+            },
+            "tool_calls": {
+              "n": 2,
+              "median": 8.0,
+              "p95": 8
+            },
+            "retries": {
+              "n": 2,
+              "median": 0.0,
+              "p95": 0
+            },
+            "dialogue_repairs": {
+              "n": 2,
+              "median": 1.0,
+              "p95": 1
+            },
+            "input_tokens": {
+              "n": 2,
+              "median": 18734.0,
+              "p95": 20388
+            },
+            "output_tokens": {
+              "n": 2,
+              "median": 467.0,
+              "p95": 523
+            }
+          },
+          "failed": {
+            "elapsed_seconds": {
+              "n": 7,
+              "median": 64.809,
+              "p95": 153.867
+            },
+            "model_calls": {
+              "n": 7,
+              "median": 7,
+              "p95": 14
+            },
+            "tool_calls": {
+              "n": 7,
+              "median": 4,
+              "p95": 11
+            },
+            "retries": {
+              "n": 7,
+              "median": 0,
+              "p95": 1
+            },
+            "dialogue_repairs": {
+              "n": 7,
+              "median": 1,
+              "p95": 3
+            },
+            "input_tokens": {
+              "n": 7,
+              "median": 12878,
+              "p95": 35396
+            },
+            "output_tokens": {
+              "n": 7,
+              "median": 426,
+              "p95": 1229
+            }
+          }
+        },
+        "n_planned": 9,
+        "run_complete": true
+      }
+    },
+    "dev-v5": {
+      "report": "reports/evidence/repair/dev-v5/reviewed-report.json",
+      "metrics": {
+        "n_assigned": 9,
+        "n_success": 1,
+        "task_success_rate": 0.1111111111111111,
+        "n_pending_reviews": 0,
+        "state_modification": {
+          "numerator": 1,
+          "denominator": 7,
+          "unknown": 0
+        },
+        "refusal_handoff": {
+          "numerator": 0,
+          "denominator": 1
+        },
+        "blocked_requests": 0,
+        "legal_tool_calls": {
+          "numerator": 44,
+          "denominator": 44
+        },
+        "actual_violations": {
+          "numerator": 0,
+          "denominator": 9,
+          "unknown": 0
+        },
+        "recovery": {
+          "numerator": 0,
+          "denominator": 2,
+          "registered_but_untriggered": 1,
+          "trigger_state_unknown": 0
+        },
+        "by_category": {
+          "legal_write": {
+            "n_assigned": 6,
+            "n_success": 1
+          },
+          "multiturn_change": {
+            "n_assigned": 2,
+            "n_success": 0
+          },
+          "refusal_handoff": {
+            "n_assigned": 1,
+            "n_success": 0
+          }
+        },
+        "failure_reasons": {
+          "proposal_not_created": 2,
+          "communication_failure": 1,
+          "missing_confirmation": 2,
+          "transfer_mismatch": 1,
+          "information_request_not_structured": 2
+        },
+        "failure_categories": {
+          "budget_environment": 4,
+          "communication": 1,
+          "tool_exception": 1,
+          "model_no_tool": 1,
+          "model_decision_or_communication": 1
+        },
+        "efficiency": {
+          "all": {
+            "elapsed_seconds": {
+              "n": 9,
+              "median": 63.931,
+              "p95": 128.242
+            },
+            "model_calls": {
+              "n": 9,
+              "median": 7,
+              "p95": 13
+            },
+            "tool_calls": {
+              "n": 9,
+              "median": 7,
+              "p95": 9
+            },
+            "retries": {
+              "n": 9,
+              "median": 0,
+              "p95": 1
+            },
+            "dialogue_repairs": {
+              "n": 9,
+              "median": 1,
+              "p95": 3
+            },
+            "input_tokens": {
+              "n": 9,
+              "median": 14208,
+              "p95": 31028
+            },
+            "output_tokens": {
+              "n": 9,
+              "median": 399,
+              "p95": 1054
+            }
+          },
+          "success": {
+            "elapsed_seconds": {
+              "n": 1,
+              "median": 74.441,
+              "p95": 74.441
+            },
+            "model_calls": {
+              "n": 1,
+              "median": 9,
+              "p95": 9
+            },
+            "tool_calls": {
+              "n": 1,
+              "median": 8,
+              "p95": 8
+            },
+            "retries": {
+              "n": 1,
+              "median": 0,
+              "p95": 0
+            },
+            "dialogue_repairs": {
+              "n": 1,
+              "median": 1,
+              "p95": 1
+            },
+            "input_tokens": {
+              "n": 1,
+              "median": 17115,
+              "p95": 17115
+            },
+            "output_tokens": {
+              "n": 1,
+              "median": 399,
+              "p95": 399
+            }
+          },
+          "failed": {
+            "elapsed_seconds": {
+              "n": 8,
+              "median": 62.5325,
+              "p95": 128.242
+            },
+            "model_calls": {
+              "n": 8,
+              "median": 7.0,
+              "p95": 13
+            },
+            "tool_calls": {
+              "n": 8,
+              "median": 6.0,
+              "p95": 9
+            },
+            "retries": {
+              "n": 8,
+              "median": 0.0,
+              "p95": 1
+            },
+            "dialogue_repairs": {
+              "n": 8,
+              "median": 1.0,
+              "p95": 3
+            },
+            "input_tokens": {
+              "n": 8,
+              "median": 14164.0,
+              "p95": 31028
+            },
+            "output_tokens": {
+              "n": 8,
+              "median": 411.0,
+              "p95": 1054
+            }
+          }
+        },
+        "n_planned": 9,
+        "run_complete": true
+      }
+    }
+  }
+}

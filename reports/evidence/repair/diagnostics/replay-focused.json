@@ -1,0 +1,551 @@
+[
+  {
+    "task": "24",
+    "input": [
+      {
+        "type": "system",
+        "data": {
+          "content": "Make one native ask_user tool call requesting the customer information in the quoted message. Use the matching allowed field categories. Do not answer the message, do not invent facts, and do not output plain text.",
+          "additional_kwargs": {},
+          "response_metadata": {},
+          "type": "system",
+          "name": null,
+          "id": null
+        }
+      },
+      {
+        "type": "human",
+        "data": {
+          "content": "I want to return something.",
+          "additional_kwargs": {
+            "protocol_example": true
+          },
+          "response_metadata": {},
+          "type": "human",
+          "name": null,
+          "id": null
+        }
+      },
+      {
+        "type": "ai",
+        "data": {
+          "content": "",
+          "additional_kwargs": {
+            "protocol_example": true
+          },
+          "response_metadata": {},
+          "type": "ai",
+          "name": null,
+          "id": null,
+          "tool_calls": [
+            {
+              "name": "ask_user",
+              "args": {
+                "fields": [
+                  "identity"
+                ],
+                "question": "What is your email or full name and ZIP?"
+              },
+              "id": "example-ask-0",
+              "type": "tool_call"
+            }
+          ],
+          "invalid_tool_calls": [],
+          "usage_metadata": null
+        }
+      },
+      {
+        "type": "tool",
+        "data": {
+          "content": "{\"ok\": true, \"code\": \"NEEDS_INPUT\", \"data\": {\"fields\": [\"identity\"], \"question\": \"What is your email or full name and ZIP?\"}}",
+          "additional_kwargs": {
+            "protocol_example": true
+          },
+          "response_metadata": {},
+          "type": "tool",
+          "name": "ask_user",
+          "id": null,
+          "tool_call_id": "example-ask-0",
+          "artifact": null,
+          "status": "success"
+        }
+      },
+      {
+        "type": "human",
+        "data": {
+          "content": "Cancel my purchase please.",
+          "additional_kwargs": {
+            "protocol_example": true
+          },
+          "response_metadata": {},
+          "type": "human",
+          "name": null,
+          "id": null
+        }
+      },
+      {
+        "type": "ai",
+        "data": {
+          "content": "",
+          "additional_kwargs": {
+            "protocol_example": true
+          },
+          "response_metadata": {},
+          "type": "ai",
+          "name": null,
+          "id": null,
+          "tool_calls": [
+            {
+              "name": "ask_user",
+              "args": {
+                "fields": [
+                  "identity"
+                ],
+                "question": "What is your email or full name and ZIP?"
+              },
+              "id": "example-ask-1",
+              "type": "tool_call"
+            }
+          ],
+          "invalid_tool_calls": [],
+          "usage_metadata": null
+        }
+      },
+      {
+        "type": "tool",
+        "data": {
+          "content": "{\"ok\": true, \"code\": \"NEEDS_INPUT\", \"data\": {\"fields\": [\"identity\"], \"question\": \"What is your email or full name and ZIP?\"}}",
+          "additional_kwargs": {
+            "protocol_example": true
+          },
+          "response_metadata": {},
+          "type": "tool",
+          "name": "ask_user",
+          "id": null,
+          "tool_call_id": "example-ask-1",
+          "artifact": null,
+          "status": "success"
+        }
+      },
+      {
+        "type": "human",
+        "data": {
+          "content": "{\"customer_information_request\": \"Your order #W3561391 for the gas portable grill is currently pending and includes the item you wish to cancel. \\n\\nTo proceed with cancellation, please confirm the reason:  \\n- \\\"ordered by mistake\\\"  \\n- \\\"no longer needed\\\"  \\n\\nOnce you provide the reason, I will stage the cancellation proposal for your review.\"}",
+          "additional_kwargs": {},
+          "response_metadata": {},
+          "type": "human",
+          "name": null,
+          "id": null
+        }
+      }
+    ],
+    "response": [
+      {
+        "type": "ai",
+        "data": {
+          "content": "",
+          "additional_kwargs": {},
+          "response_metadata": {
+            "model": "qwen3:4b-instruct-2507-q4_K_M",
+            "created_at": "2026-10-21T03:02:55.377619Z",
+            "done": true,
+            "done_reason": "stop",
+            "total_duration": 2486208209,
+            "load_duration": 66663334,
+            "prompt_eval_count": 494,
+            "prompt_eval_duration": 1487799125,
+            "eval_count": 42,
+            "eval_duration": 921202789,
+            "logprobs": null,
+            "model_name": "qwen3:4b-instruct-2507-q4_K_M",
+            "model_provider": "ollama"
+          },
+          "type": "ai",
+          "name": null,
+          "id": "lc_run--01a15c69-62d0-715c-8af9-bf06e16b5f1a-0",
+          "tool_calls": [
+            {
+              "name": "ask_user",
+              "args": {
+                "fields": [
+                  "cancel_reason"
+                ],
+                "question": "Please select the reason for cancellation: 'ordered by mistake' or 'no longer needed'?"
+              },
+              "id": "376716c0-8cf9-4938-9b9e-1feb94e85ba5",
+              "type": "tool_call"
+            }
+          ],
+          "invalid_tool_calls": [],
+          "usage_metadata": {
+            "input_tokens": 494,
+            "output_tokens": 42,
+            "total_tokens": 536
+          }
+        }
+      }
+    ]
+  },
+  {
+    "task": "2",
+    "input": [
+      {
+        "type": "system",
+        "data": {
+          "content": "Make one native ask_user tool call requesting the customer information in the quoted message. Use the matching allowed field categories. Do not answer the message, do not invent facts, and do not output plain text.",
+          "additional_kwargs": {},
+          "response_metadata": {},
+          "type": "system",
+          "name": null,
+          "id": null
+        }
+      },
+      {
+        "type": "human",
+        "data": {
+          "content": "I want to return something.",
+          "additional_kwargs": {
+            "protocol_example": true
+          },
+          "response_metadata": {},
+          "type": "human",
+          "name": null,
+          "id": null
+        }
+      },
+      {
+        "type": "ai",
+        "data": {
+          "content": "",
+          "additional_kwargs": {
+            "protocol_example": true
+          },
+          "response_metadata": {},
+          "type": "ai",
+          "name": null,
+          "id": null,
+          "tool_calls": [
+            {
+              "name": "ask_user",
+              "args": {
+                "fields": [
+                  "identity"
+                ],
+                "question": "What is your email or full name and ZIP?"
+              },
+              "id": "example-ask-0",
+              "type": "tool_call"
+            }
+          ],
+          "invalid_tool_calls": [],
+          "usage_metadata": null
+        }
+      },
+      {
+        "type": "tool",
+        "data": {
+          "content": "{\"ok\": true, \"code\": \"NEEDS_INPUT\", \"data\": {\"fields\": [\"identity\"], \"question\": \"What is your email or full name and ZIP?\"}}",
+          "additional_kwargs": {
+            "protocol_example": true
+          },
+          "response_metadata": {},
+          "type": "tool",
+          "name": "ask_user",
+          "id": null,
+          "tool_call_id": "example-ask-0",
+          "artifact": null,
+          "status": "success"
+        }
+      },
+      {
+        "type": "human",
+        "data": {
+          "content": "Cancel my purchase please.",
+          "additional_kwargs": {
+            "protocol_example": true
+          },
+          "response_metadata": {},
+          "type": "human",
+          "name": null,
+          "id": null
+        }
+      },
+      {
+        "type": "ai",
+        "data": {
+          "content": "",
+          "additional_kwargs": {
+            "protocol_example": true
+          },
+          "response_metadata": {},
+          "type": "ai",
+          "name": null,
+          "id": null,
+          "tool_calls": [
+            {
+              "name": "ask_user",
+              "args": {
+                "fields": [
+                  "identity"
+                ],
+                "question": "What is your email or full name and ZIP?"
+              },
+              "id": "example-ask-1",
+              "type": "tool_call"
+            }
+          ],
+          "invalid_tool_calls": [],
+          "usage_metadata": null
+        }
+      },
+      {
+        "type": "tool",
+        "data": {
+          "content": "{\"ok\": true, \"code\": \"NEEDS_INPUT\", \"data\": {\"fields\": [\"identity\"], \"question\": \"What is your email or full name and ZIP?\"}}",
+          "additional_kwargs": {
+            "protocol_example": true
+          },
+          "response_metadata": {},
+          "type": "tool",
+          "name": "ask_user",
+          "id": null,
+          "tool_call_id": "example-ask-1",
+          "artifact": null,
+          "status": "success"
+        }
+      },
+      {
+        "type": "human",
+        "data": {
+          "content": "{\"customer_information_request\": \"The order #W6247578 is currently pending and includes a T-shirt (black, XXL, cotton, crew neck). There are no other T-shirt options available in this order.\\n\\nRegarding your request to return the vacuum cleaner, headphones, and smart watch, I notice that these items are not part of the order #W6247578. This order only includes the T-shirt.\\n\\nIf you'd like to return the vacuum cleaner, headphones, and smart watch, please provide the order ID for that specific order, or confirm if you'd like to proceed with returning items from a different order.\\n\\nLet me know how you'd like to proceed!\"}",
+          "additional_kwargs": {},
+          "response_metadata": {},
+          "type": "human",
+          "name": null,
+          "id": null
+        }
+      }
+    ],
+    "response": [
+      {
+        "type": "ai",
+        "data": {
+          "content": "The order #W6247578 only includes a T-shirt and does not contain the vacuum cleaner, headphones, or smart watch. If you'd like to return the vacuum cleaner, headphones, and smart watch, please provide the order ID for that specific order. Otherwise, let me know if you'd like to proceed with returning items from a different order.",
+          "additional_kwargs": {},
+          "response_metadata": {
+            "model": "qwen3:4b-instruct-2507-q4_K_M",
+            "created_at": "2026-10-21T03:02:57.649118Z",
+            "done": true,
+            "done_reason": "stop",
+            "total_duration": 2224548375,
+            "load_duration": 45249833,
+            "prompt_eval_count": 559,
+            "prompt_eval_duration": 470834167,
+            "eval_count": 76,
+            "eval_duration": 1690604999,
+            "logprobs": null,
+            "model_name": "qwen3:4b-instruct-2507-q4_K_M",
+            "model_provider": "ollama"
+          },
+          "type": "ai",
+          "name": null,
+          "id": "lc_run--01a15c69-6cbf-74ee-8ab5-38afa68ddf45-0",
+          "tool_calls": [],
+          "invalid_tool_calls": [],
+          "usage_metadata": {
+            "input_tokens": 559,
+            "output_tokens": 76,
+            "total_tokens": 635
+          }
+        }
+      }
+    ]
+  },
+  {
+    "task": "92",
+    "input": [
+      {
+        "type": "system",
+        "data": {
+          "content": "Make one native ask_user tool call requesting the customer information in the quoted message. Use the matching allowed field categories. Do not answer the message, do not invent facts, and do not output plain text.",
+          "additional_kwargs": {},
+          "response_metadata": {},
+          "type": "system",
+          "name": null,
+          "id": null
+        }
+      },
+      {
+        "type": "human",
+        "data": {
+          "content": "I want to return something.",
+          "additional_kwargs": {
+            "protocol_example": true
+          },
+          "response_metadata": {},
+          "type": "human",
+          "name": null,
+          "id": null
+        }
+      },
+      {
+        "type": "ai",
+        "data": {
+          "content": "",
+          "additional_kwargs": {
+            "protocol_example": true
+          },
+          "response_metadata": {},
+          "type": "ai",
+          "name": null,
+          "id": null,
+          "tool_calls": [
+            {
+              "name": "ask_user",
+              "args": {
+                "fields": [
+                  "identity"
+                ],
+                "question": "What is your email or full name and ZIP?"
+              },
+              "id": "example-ask-0",
+              "type": "tool_call"
+            }
+          ],
+          "invalid_tool_calls": [],
+          "usage_metadata": null
+        }
+      },
+      {
+        "type": "tool",
+        "data": {
+          "content": "{\"ok\": true, \"code\": \"NEEDS_INPUT\", \"data\": {\"fields\": [\"identity\"], \"question\": \"What is your email or full name and ZIP?\"}}",
+          "additional_kwargs": {
+            "protocol_example": true
+          },
+          "response_metadata": {},
+          "type": "tool",
+          "name": "ask_user",
+          "id": null,
+          "tool_call_id": "example-ask-0",
+          "artifact": null,
+          "status": "success"
+        }
+      },
+      {
+        "type": "human",
+        "data": {
+          "content": "Cancel my purchase please.",
+          "additional_kwargs": {
+            "protocol_example": true
+          },
+          "response_metadata": {},
+          "type": "human",
+          "name": null,
+          "id": null
+        }
+      },
+      {
+        "type": "ai",
+        "data": {
+          "content": "",
+          "additional_kwargs": {
+            "protocol_example": true
+          },
+          "response_metadata": {},
+          "type": "ai",
+          "name": null,
+          "id": null,
+          "tool_calls": [
+            {
+              "name": "ask_user",
+              "args": {
+                "fields": [
+                  "identity"
+                ],
+                "question": "What is your email or full name and ZIP?"
+              },
+              "id": "example-ask-1",
+              "type": "tool_call"
+            }
+          ],
+          "invalid_tool_calls": [],
+          "usage_metadata": null
+        }
+      },
+      {
+        "type": "tool",
+        "data": {
+          "content": "{\"ok\": true, \"code\": \"NEEDS_INPUT\", \"data\": {\"fields\": [\"identity\"], \"question\": \"What is your email or full name and ZIP?\"}}",
+          "additional_kwargs": {
+            "protocol_example": true
+          },
+          "response_metadata": {},
+          "type": "tool",
+          "name": "ask_user",
+          "id": null,
+          "tool_call_id": "example-ask-1",
+          "artifact": null,
+          "status": "success"
+        }
+      },
+      {
+        "type": "human",
+        "data": {
+          "content": "{\"customer_information_request\": \"The order with the skateboards you purchased, #W7553978, has already been delivered and cannot be returned. Returns are only possible for delivered orders, and the process requires a specific return proposal to be created. \\n\\nTo proceed with a return, I would need the exact item IDs for the skateboards you'd like to return. Could you please confirm the item IDs or provide more details about the skateboards? \\n\\nAlternatively, if you'd like to cancel the order instead, please let me know if the reason is \\\"ordered by mistake\\\" or \\\"no longer needed.\\\"\"}",
+          "additional_kwargs": {},
+          "response_metadata": {},
+          "type": "human",
+          "name": null,
+          "id": null
+        }
+      }
+    ],
+    "response": [
+      {
+        "type": "ai",
+        "data": {
+          "content": "",
+          "additional_kwargs": {},
+          "response_metadata": {
+            "model": "qwen3:4b-instruct-2507-q4_K_M",
+            "created_at": "2026-10-21T03:02:59.001003Z",
+            "done": true,
+            "done_reason": "stop",
+            "total_duration": 1306224875,
+            "load_duration": 44765500,
+            "prompt_eval_count": 539,
+            "prompt_eval_duration": 377614959,
+            "eval_count": 40,
+            "eval_duration": 873922416,
+            "logprobs": null,
+            "model_name": "qwen3:4b-instruct-2507-q4_K_M",
+            "model_provider": "ollama"
+          },
+          "type": "ai",
+          "name": null,
+          "id": "lc_run--01a15c69-759d-70ea-83c4-79e20204b97a-0",
+          "tool_calls": [
+            {
+              "name": "ask_user",
+              "args": {
+                "fields": [
+                  "cancel_reason"
+                ],
+                "question": "Is the reason for cancellation 'ordered by mistake' or 'no longer needed'?"
+              },
+              "id": "5ba06bdf-3859-4374-bace-8f3bf02e6006",
+              "type": "tool_call"
+            }
+          ],
+          "invalid_tool_calls": [],
+          "usage_metadata": {
+            "input_tokens": 539,
+            "output_tokens": 40,
+            "total_tokens": 579
+          }
+        }
+      }
+    ]
+  }
+]
