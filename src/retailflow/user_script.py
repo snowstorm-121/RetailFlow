@@ -3,8 +3,13 @@
 from copy import deepcopy
 
 
-def user_view(task: dict) -> dict:
-    return deepcopy({key: task[key] for key in ("initial_user_message", "user_private_facts", "script")})
+def user_view(task: dict, field_responses: dict | None = None) -> dict:
+    replies = field_responses or {}
+    if set(replies) - {"identity", "order", "cancel_reason", "return_items", "refund_method"}:
+        raise ValueError("Unsupported user reply field")
+    spec = deepcopy({key: task[key] for key in ("initial_user_message", "user_private_facts", "script")})
+    spec["script"]["field_responses"].update(deepcopy(replies))
+    return spec
 
 
 class ScriptedUser:

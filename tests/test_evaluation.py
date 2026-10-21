@@ -39,7 +39,7 @@ def test_script_projection_excludes_gold_and_does_not_depend_on_it():
     user = ScriptedUser(user_view(original), {"tool": "cancel_pending_order", "all": True})
     assert user.answer({"fields": ["identity"], "question": "Your identity?"}) == "Yara Muller, 85041"
     with pytest.raises(ValueError, match="script_unhandled"):
-        user.answer({"fields": ["unknown_field"], "question": "Unknown?"})
+        user.answer({"fields": ["order"], "question": "Your order number?"})
 
 
 def test_script_rejects_unintended_items_and_preserves_registered_revision():
@@ -86,18 +86,18 @@ def test_baseline_context_has_no_slots_but_keeps_application_outcome():
     assert any("Application outcome" in message.content for message in visible)
 
 
-def test_evaluate_episode_stops_on_unknown_script_request_and_keeps_denominator(tmp_path):
+def test_evaluate_episode_stops_on_missing_script_response_and_keeps_denominator(tmp_path):
     from retailflow.runtime import RetailRuntime
 
-    class AskUnknown:
+    class AskUnregistered:
         def bind_tools(self, _):
             return self
 
         async def ainvoke(self, *_args, **_kwargs):
             return AIMessage(content="", tool_calls=[{"name": "ask_user", "args": {
-                "fields": ["unknown_field"], "question": "Unknown?"}, "id": "ask1"}])
+                "fields": ["order"], "question": "Your order number?"}, "id": "ask1"}])
 
-    worker = RetailRuntime(tmp_path / "store.sqlite", tmp_path / "traces", model_factory=lambda _: AskUnknown())
+    worker = RetailRuntime(tmp_path / "store.sqlite", tmp_path / "traces", model_factory=lambda _: AskUnregistered())
     specimen = task()
     from conftest import STATE_REF
     specimen["initial_state_ref"] = STATE_REF
@@ -171,3 +171,15 @@ def test_state_modification_metric_survives_failed_communication_review():
                                 "objective_passed": True, "requires_write": True, "status": "answered"}])
     assert report["n_success"] == 0
     assert report["state_modification"]["numerator"] == 1
+
+
+def test_versioned_user_reply_override_is_private_until_requested_and_keeps_gold_out():
+    original = task()
+    spec = user_view(original, {'cancel_reason': 'I ordered it by mistake.'})
+    user = ScriptedUser(spec, {})
+    assert user.answer({'fields': ['cancel_reason'], 'question': 'Why cancel?'}) == 'I ordered it by mistake.'
+    assert 'cancel_reason' not in original['script']['field_responses']
+    assert 'expected_checks' not in spec
+    assert spec['initial_user_message'] == original['initial_user_message']
+    with pytest.raises(ValueError, match='Unsupported'):
+        user_view(original, {'expected_checks': 'not a user field'})

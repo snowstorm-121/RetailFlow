@@ -40,7 +40,7 @@ def test_single_tool_result_and_answer_keep_call_id(tmp_path):
         call("find_user_id_by_name_zip", {"first_name": "Yara", "last_name": "Muller", "zip": "85041"}, "u1"),
         AIMessage(content="Found your account."),
     ])
-    result = asyncio.run(worker.run_turn("a", {"kind": "message", "text": "Find my account"}, config))
+    result = asyncio.run(worker.run_turn("a", {"kind": "message", "text": "Find my account: Yara Muller, ZIP 85041."}, config))
     assert result["status"] == "answered"
     assert len(model.bound_tools) == 9
     messages = worker.load_messages("a")
@@ -68,12 +68,12 @@ def test_two_dependent_tools_use_previous_result(tmp_path):
 
 def test_ask_user_pauses_and_next_message_resumes(tmp_path):
     worker, model, config = runtime(tmp_path, [
-        call("ask_user", {"fields": ["zip"], "question": "What is your ZIP code?"}, "ask1"),
+        call("ask_user", {"fields": ["identity"], "question": "What is your ZIP code?"}, "ask1"),
         call("find_user_id_by_name_zip", {"first_name": "Yara", "last_name": "Muller", "zip": "85041"}, "u1"),
         AIMessage(content="Found your account."),
     ])
     first = asyncio.run(worker.run_turn("a", {"kind": "message", "text": "I am Yara Muller."}, config))
-    assert first["status"] == "needs_input" and first["request"]["fields"] == ["zip"]
+    assert first["status"] == "needs_input" and first["request"]["fields"] == ["identity"]
     second = asyncio.run(worker.run_turn("a", {"kind": "message", "text": "85041"}, config))
     assert second["status"] == "answered"
     assert len([m for m in worker.load_messages("a") if isinstance(m, ToolMessage)]) == 2
@@ -85,8 +85,8 @@ def test_ask_user_schema_rejects_duplicate_requested_fields(tmp_path):
     schema = next(tool for tool in RETAIL_TOOLS if tool["function"]["name"] == "ask_user")
     assert schema["function"]["parameters"]["properties"]["fields"]["uniqueItems"] is True
     worker, _, config = runtime(tmp_path, [
-        call("ask_user", {"fields": ["zip", "zip"], "question": "ZIP?"}, "a1"),
-        AIMessage(content="I need one ZIP."),
+        call("ask_user", {"fields": ["identity", "identity"], "question": "ZIP?"}, "a1"),
+        AIMessage(content="The duplicate field request was rejected."),
     ])
     result = asyncio.run(worker.run_turn("a", {"kind": "message", "text": "Find me"}, config))
     assert result["status"] == "answered"
@@ -109,18 +109,19 @@ def test_multiple_calls_are_rejected_without_partial_execution(tmp_path):
     assert worker.environment.get_order("a", "#W5056519")["status"] == "pending"
 
 
-def test_tool_call_with_user_facing_text_is_rejected(tmp_path):
+def test_tool_narration_does_not_bypass_identity_or_write_confirmation(tmp_path):
     worker, _, config = runtime(tmp_path, [
         AIMessage(content="I cancelled it.", tool_calls=[{"name": "cancel_pending_order",
             "args": {"order_id": "#W5056519", "reason": "ordered by mistake"}, "id": "c1"}]),
-        AIMessage(content="I need to verify your identity first."),
+        call("ask_user", {"fields": ["identity"], "question": "Your identity?"}, "ask2"),
     ])
     result = asyncio.run(worker.run_turn("a", {"kind": "message", "text": "Cancel #W5056519"}, config))
-    assert result["status"] == "answered"
+    assert result["status"] == "needs_input"
     tool = next(m for m in worker.load_messages("a") if isinstance(m, ToolMessage))
     assert tool.tool_call_id == "c1" and tool.status == "error"
-    assert json.loads(tool.content)["code"] == "PROTOCOL_ERROR"
-    assert result["usage"]["protocol_errors"] == 1
+    assert json.loads(tool.content)["code"] == "AUTH_REQUIRED"
+    assert result["usage"]["protocol_errors"] == 0
+    assert worker.environment.get_order("a", "#W5056519")["status"] == "pending"
     assert worker.environment.pending_proposal("a") is None
 
 
@@ -182,10 +183,11 @@ def test_final_cannot_claim_uncreated_proposal(tmp_path):
         call("find_user_id_by_name_zip", {"first_name": "Yara", "last_name": "Muller", "zip": "85041"}, "u1"),
         call("get_order_details", {"order_id": "#W5056519"}, "o1"),
         AIMessage(content="A cancellation proposal has been created for your order."),
+        AIMessage(content="A cancellation proposal has been created for your order."),
     ])
     result = asyncio.run(worker.run_turn("a", {"kind": "message", "text": "Cancel #W5056519. I am Yara Muller, 85041."}, config))
     assert result["status"] == "failed"
-    assert result["failure_reason"] == "unsupported_action_claim"
+    assert result["failure_reason"] == "proposal_not_created"
     assert worker.environment.pending_proposal("a") is None
 
 

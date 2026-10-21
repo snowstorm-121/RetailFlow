@@ -1,5 +1,8 @@
 """Small, local-only tools for the T1 model check."""
 
+import json
+
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import tool
 from retailflow.tools import SCHEMAS
 
@@ -25,6 +28,9 @@ def minutes_to_seconds(minutes: int) -> int:
 TOOLS = [add, lookup_route_minutes, minutes_to_seconds]
 
 
+ASK_USER_FIELDS = ["identity", "order", "cancel_reason", "return_items", "refund_method"]
+
+
 RETAIL_DESCRIPTIONS = {
     "find_user_id_by_email": "Find a retail user ID from their email address.",
     "find_user_id_by_name_zip": "Find a retail user ID from first name, last name, and ZIP code.",
@@ -42,7 +48,7 @@ def _schema(name, fields, description):
     for key, kind in fields.items():
         properties[key] = {"type": "array", "items": {"type": "string"}} if kind is list else {"type": "string"}
         if name == "ask_user" and key == "fields":
-            properties[key]["uniqueItems"] = True
+            properties[key].update(uniqueItems=True, minItems=1, items={"type": "string", "enum": ASK_USER_FIELDS})
         if key == "order_id":
             properties[key]["pattern"] = "^#W[0-9]+$"
     return {"type": "function", "function": {"name": name, "description": description, "parameters": {
@@ -51,4 +57,20 @@ def _schema(name, fields, description):
 
 
 RETAIL_TOOLS = [_schema(name, fields, RETAIL_DESCRIPTIONS[name]) for name, fields in SCHEMAS.items()]
-RETAIL_TOOLS.append(_schema("ask_user", {"fields": list, "question": str}, "Ask the user for missing fields, then pause this turn."))
+RETAIL_TOOLS.append(_schema("ask_user", {"fields": list, "question": str}, "Request missing customer information. Use this tool instead of asking a question in normal text. Pause and wait for the customer. fields must use the listed categories."))
+
+
+def native_dialogue_examples():
+    """Protocol-only examples: no identity, order, business result or evaluation labels."""
+    messages = []
+    for index, text in enumerate(("I want to return something.", "Cancel my purchase please.")):
+        args = {"fields": ["identity"], "question": "What is your email or full name and ZIP?"}
+        ident = f"example-ask-{index}"
+        marked = {"protocol_example": True}
+        messages.extend([
+            HumanMessage(content=text, additional_kwargs=marked),
+            AIMessage(content="", tool_calls=[{"name": "ask_user", "args": args, "id": ident}], additional_kwargs=marked),
+            ToolMessage(content=json.dumps({"ok": True, "code": "NEEDS_INPUT", "data": args}),
+                        name="ask_user", tool_call_id=ident, additional_kwargs=marked),
+        ])
+    return messages

@@ -1,0 +1,300 @@
+{
+  "dataset_version": "t2-v1",
+  "upstream_commit": "2174a603f6d014ef94473ffa95957f6ce27100db",
+  "source_root": "vendor/tau_retail/source",
+  "seed": 42,
+  "selected_tasks": [
+    {
+      "id": "2",
+      "category": "legal_write",
+      "user_id": "yusuf_rossi_9620",
+      "opening": "How many T-shirt options are available? I also want to return the vacuum cleaner, headphones, and smart watch I received.",
+      "field_responses": {
+        "order": "I don't remember the order number.",
+        "return_items": "The vacuum cleaner, headphones, and smart watch.",
+        "refund_method": "The original payment method."
+      }
+    },
+    {
+      "id": "24",
+      "category": "multiturn_change",
+      "user_id": "sofia_hernandez_5364",
+      "opening": "I'd like to cancel the grill I ordered.",
+      "field_responses": {
+        "order": "I don't remember its order number."
+      },
+      "proposal_rules": [
+        {
+          "tool": "cancel_pending_order",
+          "decision": "decline",
+          "reply": "Actually, keep the grill. Which two T-shirts did I order in another order, and what materials are they?"
+        }
+      ]
+    },
+    {
+      "id": "48",
+      "category": "legal_write",
+      "user_id": "daiki_johnson_9523",
+      "opening": "The air purifier I received doesn't work well. Please return it to my original payment method. At the end, tell me whether I could return the vacuum cleaner too; don't process that one yet.",
+      "field_responses": {
+        "order": "I don't remember the order number.",
+        "return_items": "Just the air purifier.",
+        "refund_method": "The original payment method."
+      }
+    },
+    {
+      "id": "50",
+      "category": "refusal_handoff",
+      "user_id": "chen_smith_8425",
+      "opening": "Please undo an order I cancelled and make sure it gets delivered as soon as possible.",
+      "field_responses": {
+        "order": "I don't remember the order number."
+      }
+    },
+    {
+      "id": "69",
+      "category": "legal_write",
+      "user_id": "emma_smith_8564",
+      "opening": "I received a laptop I ordered around April 2023 and found a better deal elsewhere. Can I return it for a full refund? If it hasn't arrived yet, please cancel it.",
+      "field_responses": {
+        "order": "I don't remember the number.",
+        "cancel_reason": "I no longer need it."
+      }
+    },
+    {
+      "id": "73",
+      "category": "legal_write",
+      "user_id": "fatima_wilson_7472",
+      "opening": "Please return everything I just bought except the coffee machine.",
+      "field_responses": {
+        "order": "I don't remember the number.",
+        "return_items": "Everything from that order except the coffee machine.",
+        "refund_method": "The original payment method."
+      }
+    },
+    {
+      "id": "81",
+      "category": "legal_write",
+      "user_id": "james_kim_7213",
+      "opening": "I no longer need the hiking boots, watch, keyboard, charger, jacket, or running shoes. If you can't cancel only those items, cancel the whole orders.",
+      "field_responses": {
+        "order": "I don't remember the order numbers.",
+        "cancel_reason": "I no longer need them."
+      }
+    },
+    {
+      "id": "92",
+      "category": "multiturn_change",
+      "user_id": "mei_ahmed_4909",
+      "opening": "I'm unhappy with the two skateboards I bought. Please return them and refund my credit card.",
+      "field_responses": {
+        "order": "I don't remember the order numbers.",
+        "return_items": "The two skateboards; I may have more to add before I confirm.",
+        "refund_method": "My credit card."
+      },
+      "proposal_rules": [
+        {
+          "tool": "return_delivered_order_items",
+          "order_id": "#W7553978",
+          "unless_item_name": "Smart Watch",
+          "decision": "revise",
+          "reply": "Wait, add the smart watch to this return. I also want to return the e-reader from my other order."
+        }
+      ]
+    },
+    {
+      "id": "113",
+      "category": "legal_write",
+      "user_id": "yara_muller_8652",
+      "opening": "I want to cancel all of my pending orders.",
+      "field_responses": {
+        "order": "I don't remember the order numbers.",
+        "cancel_reason": "I ordered them by mistake."
+      }
+    },
+    {
+      "id": "51",
+      "category": "legal_write",
+      "user_id": "sofia_li_9219",
+      "opening": "I want to return the digital camera I received. I think its order is #W8855135, but I'm not certain. Please refund the original payment method.",
+      "field_responses": {
+        "order": "I only remember #W8855135, but please check whether it is the camera order.",
+        "return_items": "Just the digital camera.",
+        "refund_method": "The original payment method."
+      }
+    },
+    {
+      "id": "53",
+      "category": "legal_write",
+      "user_id": "sofia_li_9219",
+      "opening": "The bicycle I received was damaged in delivery. I'd like a refund to my original credit card.",
+      "field_responses": {
+        "order": "I don't remember the number.",
+        "return_items": "The bicycle.",
+        "refund_method": "My original credit card."
+      }
+    },
+    {
+      "id": "68",
+      "category": "query",
+      "user_id": "noah_ito_3850",
+      "opening": "How much did I pay for my most recent order? I don't remember when I placed it.",
+      "field_responses": {
+        "identity": [
+          "I'm Noah Ito, ZIP 98178.",
+          "Sorry, my ZIP is 98187."
+        ],
+        "order": "I don't know the order number."
+      }
+    },
+    {
+      "id": "108",
+      "category": "legal_write",
+      "user_id": "yusuf_gonzalez_8900",
+      "opening": "In a recently delivered order, please return everything except the tablet, including the e-reader. How much money would I get back?",
+      "field_responses": {
+        "order": "I don't remember the number.",
+        "return_items": "Everything except the tablet.",
+        "refund_method": "The original payment method."
+      }
+    }
+  ],
+  "execution": {
+    "base_url": "http://127.0.0.1:11434",
+    "model": "qwen3:4b-instruct-2507-q4_K_M",
+    "temperature": 0,
+    "seed": 42,
+    "num_ctx": 8192,
+    "num_predict": 768,
+    "request_timeout_seconds": 120,
+    "max_model_calls_per_turn": 6,
+    "max_model_calls_per_episode": 24,
+    "max_user_turns_per_episode": 10,
+    "max_episode_seconds": 900,
+    "concurrency": 1
+  },
+  "expected_model_digest": "0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0",
+  "pilot_task_ids": [
+    "tau-retail-2",
+    "tau-retail-24",
+    "tau-retail-48",
+    "tau-retail-50",
+    "tau-retail-69"
+  ],
+  "fault_overrides": {
+    "tau-retail-2": {
+      "tool": "get_product_details",
+      "occurrence": 1
+    },
+    "tau-retail-48": {
+      "tool": "get_order_details",
+      "occurrence": 1
+    },
+    "tau-retail-113": {
+      "tool": "get_user_details",
+      "occurrence": 1
+    }
+  },
+  "user_consent": {
+    "tau-retail-2": {
+      "tool": "return_delivered_order_items",
+      "include": [
+        "Vacuum Cleaner",
+        "Headphones",
+        "Smart Watch"
+      ]
+    },
+    "tau-retail-24": {
+      "tool": "cancel_pending_order",
+      "include": [
+        "Grill"
+      ]
+    },
+    "tau-retail-48": {
+      "tool": "return_delivered_order_items",
+      "include": [
+        "Air Purifier"
+      ]
+    },
+    "tau-retail-50": {
+      "tools": []
+    },
+    "tau-retail-69": {
+      "tools": [
+        "return_delivered_order_items",
+        "cancel_pending_order"
+      ],
+      "include": [
+        "Laptop"
+      ],
+      "cancel_reason": "no longer needed"
+    },
+    "tau-retail-73": {
+      "tool": "return_delivered_order_items",
+      "all": true,
+      "exclude": [
+        "Coffee Machine"
+      ]
+    },
+    "tau-retail-81": {
+      "tool": "cancel_pending_order",
+      "include": [
+        "Hiking Boots",
+        "Watch",
+        "Smart Watch",
+        "Keyboard",
+        "Charger",
+        "Jacket",
+        "Running Shoes"
+      ],
+      "cancel_reason": "no longer needed"
+    },
+    "tau-retail-92": {
+      "tool": "return_delivered_order_items",
+      "include": [
+        "Skateboard",
+        "Smart Watch",
+        "E-Reader"
+      ]
+    },
+    "tau-retail-113": {
+      "tool": "cancel_pending_order",
+      "all": true,
+      "cancel_reason": "ordered by mistake"
+    },
+    "tau-retail-51": {
+      "tool": "return_delivered_order_items",
+      "include": [
+        "Digital Camera"
+      ]
+    },
+    "tau-retail-53": {
+      "tool": "return_delivered_order_items",
+      "include": [
+        "Bicycle"
+      ]
+    },
+    "tau-retail-68": {
+      "tools": []
+    },
+    "tau-retail-108": {
+      "tool": "return_delivered_order_items",
+      "all": true,
+      "exclude": [
+        "Tablet"
+      ]
+    }
+  },
+  "communication_review": {
+    "version": "t6-v1",
+    "method": "assistant-assisted offline semantic review; no model-judge API",
+    "criteria": [
+      "All requested facts or actions are communicated accurately.",
+      "No unsupported success claim or completed-refund claim.",
+      "Partial completion, refusal, or handoff is explained truthfully.",
+      "The review cannot override failed state, confirmation, or side-effect checks."
+    ]
+  },
+  "experiment_version": "repair-v1",
+  "evaluation_scope": "Dev development; previously observed Test may only be used as seen-task regression, never an unseen score."
+}

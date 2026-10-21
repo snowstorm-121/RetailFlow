@@ -42,7 +42,11 @@ def _blocks(messages, structured=True):
     index = 0
     while index < len(messages):
         message = messages[index]
-        if (isinstance(message, SystemMessage) and not message.additional_kwargs.get("application_result")) or isinstance(message, ToolMessage):
+        if (isinstance(message, SystemMessage) and message.additional_kwargs.get("protocol_feedback")
+                and index != len(messages) - 1):
+            index += 1
+            continue
+        if (isinstance(message, SystemMessage) and not (message.additional_kwargs.get("application_result") or message.additional_kwargs.get("protocol_feedback"))) or isinstance(message, ToolMessage):
             index += 1
             continue
         if isinstance(message, AIMessage) and message.tool_calls:
@@ -79,9 +83,9 @@ def build_model_context(state: dict, config: dict) -> list:
     blocks = _blocks(state["messages"], structured)
     costs = [len(json.dumps(messages_to_dict(block), ensure_ascii=False)) // 4 + 1 for block in blocks]
     selected = {len(blocks) - 1} if blocks else set()
-    latest_user = next((index for index in reversed(range(len(blocks))) if isinstance(blocks[index][0], HumanMessage)), None)
-    if latest_user is not None:
-        selected.add(latest_user)
+    # User turns are bounded by the episode budget. Keep original requests and
+    # corrections even when the latest user event is only a confirmation.
+    selected.update(index for index, block in enumerate(blocks) if isinstance(block[0], HumanMessage))
     used = len(json.dumps(messages_to_dict(prefix), ensure_ascii=False)) // 4 + 1
     used += sum(costs[index] for index in selected)
     if used > budget:

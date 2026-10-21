@@ -81,23 +81,28 @@ def test_runtime_uses_bounded_context_but_persists_all_messages(tmp_path):
     assert first["status"] == "answered"
     result = asyncio.run(worker.run_turn("a", {"kind": "message", "text": "By the way, hello."}, config))
     visible = model.inputs[-1]
-    assert "#W5056519" in visible[1].content
-    assert "yara_muller_8652" in visible[1].content
-    assert len(visible) < len(worker.load_messages("a"))
+    assert any("#W5056519" in message.content for message in visible
+               if isinstance(message, SystemMessage) and message.content.startswith("Verified application state"))
+    assert any("yara_muller_8652" in message.content for message in visible
+               if isinstance(message, SystemMessage) and message.content.startswith("Verified application state"))
+    assert len([m for m in visible if not m.additional_kwargs.get("protocol_example")]) < len(worker.load_messages("a"))
     assert result["usage"]["context_trimmed_messages"] > 0
 
 
-def test_long_unrelated_chat_keeps_latest_request_and_verified_target():
+def test_over_budget_user_history_is_refused_instead_of_forgetting_requests():
+    import pytest
+    from retailflow.context import ContextBudgetExceeded
+
     history = []
     for number in range(40):
         history.extend([HumanMessage(content=f"Unrelated question {number}: " + "x" * 80),
                         AIMessage(content=f"Unrelated answer {number}")])
     history.append(HumanMessage(content="What about the current order?"))
-    visible = build_model_context({"messages": history, "user_id": "u1", "target_order_id": "#W5056519"},
-                                  {"context_budget_tokens": 300})
-    assert len(visible) < 10
-    assert "#W5056519" in visible[0].content
-    assert visible[-1].content == "What about the current order?"
+    original = copy.deepcopy(history)
+    with pytest.raises(ContextBudgetExceeded):
+        build_model_context({"messages": history, "user_id": "u1", "target_order_id": "#W5056519"},
+                            {"context_budget_tokens": 300})
+    assert history == original
 
 
 def test_tool_result_does_not_evict_latest_user_intent():
@@ -147,3 +152,26 @@ def test_partial_multi_call_block_and_orphan_tool_result_are_removed_together():
     visible = build_model_context({"messages": history}, {"context_budget_tokens": 1000})
     assert not any(isinstance(message, ToolMessage) for message in visible)
     assert not any(isinstance(message, AIMessage) and message.tool_calls for message in visible)
+
+
+def test_trimming_keeps_all_customer_intent_and_corrections_across_confirmation():
+    history = [HumanMessage(content="Count shirt variants and return my headphones."), *pair(1),
+               HumanMessage(content="Use the original payment method, and keep the watch."),
+               *pair(2), *pair(3), *pair(4), HumanMessage(content="I explicitly confirm the displayed proposal."),
+               SystemMessage(content="Application outcome: return requested", additional_kwargs={"application_result": True})]
+    context = build_model_context({"messages": history, "user_id": "u1"}, {"context_budget_tokens": 500})
+    assert [m.content for m in context if isinstance(m, HumanMessage)] == [
+        m.content for m in history if isinstance(m, HumanMessage)]
+    calls = {c['id'] for m in context if isinstance(m, AIMessage) for c in m.tool_calls}
+    results = {m.tool_call_id for m in context if isinstance(m, ToolMessage)}
+    assert calls == results
+    assert 'c1' not in calls
+
+
+def test_customer_intent_cannot_be_silently_dropped_to_fit_budget():
+    import pytest
+    from retailflow.context import ContextBudgetExceeded
+
+    with pytest.raises(ContextBudgetExceeded):
+        build_model_context({'messages': [HumanMessage(content='x' * 10000), HumanMessage(content='Confirm.')]},
+                            {'context_budget_tokens': 250})

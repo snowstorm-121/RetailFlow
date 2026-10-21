@@ -113,7 +113,7 @@ def aggregate_results(results: list[dict]) -> dict:
                                                 ("communication_review_pending" if result.get("review_required") else "unclassified")
                                                 for result in results if not result["success"])),
             "efficiency": {label: {key: _distribution([r.get("elapsed_seconds") if key == "elapsed_seconds" else r.get("usage", {}).get(key) for r in subset])
-                                    for key in ("elapsed_seconds", "model_calls", "tool_calls", "retries", "input_tokens", "output_tokens")}
+                                    for key in ("elapsed_seconds", "model_calls", "tool_calls", "retries", "dialogue_repairs", "input_tokens", "output_tokens")}
                            for label, subset in {"all": results, "success": [r for r in results if r["success"]],
                                                  "failed": [r for r in results if not r["success"]]}.items()}}
 
@@ -155,10 +155,12 @@ def _tool_stats(messages):
                 elif name == "ask_user":
                     legal += int(set(args) == {"fields", "question"} and isinstance(args["question"], str)
                                  and isinstance(args["fields"], list) and all(isinstance(f, str) for f in args["fields"])
+                                 and bool(args["question"]) and bool(args["fields"])
+                                 and all(f in {"identity", "order", "cancel_reason", "return_items", "refund_method"} for f in args["fields"])
                                  and len(set(args["fields"])) == len(args["fields"]))
         elif isinstance(message, ToolMessage):
             result = json.loads(message.content)
-            blocked += result.get("code") in {"AUTH_REQUIRED", "POLICY_DENIED", "INVALID_ARGUMENT", "UNKNOWN_TOOL", "PROTOCOL_ERROR"}
+            blocked += result.get("code") in {"AUTH_REQUIRED", "POLICY_DENIED", "INVALID_ARGUMENT", "UNKNOWN_TOOL", "PROTOCOL_ERROR", "MISSING_USER_INFORMATION"}
             if result.get("ok") and message.name in IDENTITY_TOOLS:
                 user_id = result["data"]
             if result.get("ok") and message.name in {"get_user_details", "get_order_details"}:
@@ -183,10 +185,11 @@ async def evaluate_episode(task: dict, variant: str, config: dict) -> dict:
     worker.environment.create_session(thread, task["initial_state_ref"])
     before = worker.environment.load_session(thread)["business"]
     before_hash = worker.environment.state_hash(thread)
-    user = ScriptedUser(user_view(task), config.get("user_consent", {}).get(task["task_id"], {}))
+    user = ScriptedUser(user_view(task, config.get("user_script_overrides", {}).get(task["task_id"])),
+                        config.get("user_consent", {}).get(task["task_id"], {}))
     event = {"kind": "message", "text": task["initial_user_message"]}
     events, traces, accepted, followup, errors = [], [], {}, None, []
-    usage = {key: 0 for key in ("model_calls", "tool_calls", "retries", "input_tokens", "output_tokens")}
+    usage = {key: 0 for key in ("model_calls", "tool_calls", "retries", "dialogue_repairs", "input_tokens", "output_tokens")}
     missing_tokens = False
     status, reason = "failed", None
     observed = _memory()
