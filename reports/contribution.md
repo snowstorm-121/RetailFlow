@@ -1,36 +1,31 @@
-# 来源、二开贡献与作者边界
+# 来源与二次开发
 
-核查日期：2026-10-20。以下按固定上游文件、实际新增模块和测试证据划分工程贡献。
+RetailFlow 复用 Agent 循环模板、固定 retail 业务环境和本地模型。项目新增的是执行控制、状态管理与结果检查，而不是模型训练或整套业务规则。
 
-| 来源 / 已有能力 | 本项目实际复用 | RetailFlow 二开 | 不应冒称 |
-| --- | --- | --- | --- |
-| LangChain react-agent，固定 c93701b297e643c7f80926d78247e5dc06c87bfa | StateGraph 模型—工具循环、消息与条件路由模板 | 本地 ChatOllama 接入、retail 受控节点、暂停/预算/追踪；保留 T1 烟测图 | 自研 Agent 框架、发明 ReAct、原生 checkpoint 已全部接入 |
-| τ2-bench retail，固定 2174a603f6d014ef94473ffa95957f6ce27100db | 模拟 DB、任务/政策、RetailTools 业务方法、Pydantic 模型 | 薄导入兼容；只暴露八工具；身份绑定、权限和政策错误反馈、提案确认、业务快照隔离 | 自己编写全部订单规则、真实电商支付/退款、官方 τ2 成绩 |
-| Ollama / Qwen3 4B Q4_K_M | 已有服务、模型文件及其原生工具输出能力 | 请求配置和协议核查、调用约束和失败记录 | 自训练、微调模型或改进模型算法；原生 FC 可用不等于任务可靠 |
-| SQLite / LangChain 消息类型 | 本地事务、序列化消息 | 同事务业务+回执、会话历史、预算与恢复；提案变更失效 | 分布式 exactly-once；LangGraph SqliteSaver 是本项目自研 |
-| 固定 retail 源任务 | 13 道完整目标派生题，Dev 9/Test 4 | 同源用户组划分、独立初始状态、角色隔离、最终状态/必要沟通/副作用评分、三组冻结对照 | 80/60 道已完成、自动生成大量独立任务、提升或稳定生产成功率 |
+| 来源 | 复用部分 | 本项目的改造 |
+| --- | --- | --- |
+| [LangChain react-agent](https://github.com/langchain-ai/react-agent) | StateGraph 模型—工具循环、消息与条件路由 | 本地 ChatOllama 接入、受控业务节点、暂停、预算和追踪 |
+| [τ2-bench retail](https://github.com/sierra-research/tau2-bench) | 模拟数据、任务政策、RetailTools 方法及数据模型 | 固定文件适配、工具暴露范围、身份绑定、权限检查与独立业务快照 |
+| Ollama / Qwen3 | 模型权重、推理服务和原生工具输出能力 | 请求配置、协议反馈及输出检查；未训练或微调模型 |
+| SQLite / LangChain 消息类型 | 数据库事务与消息序列化 | 业务和回执同事务提交、会话历史、预算及恢复逻辑 |
 
-## 文件责任图
+上游固定版本与逐文件适配见 [UPSTREAM.md](../UPSTREAM.md)。
 
-- `src/react_agent/`：模板改造点；`prompts.py`、`__init__.py` 等保留来源，详细历史在 [UPSTREAM.md](../UPSTREAM.md)。
-- `src/retailflow/upstream/tools.py`、`data_model.py`：固定上游副本，业务方法体与字段未改，导入适配单列。`vendor/tau_retail/source` 原始文件保留且校验哈希。
-- `environment.py / storage.py`：应用权限、提案、原参数确认、差异提交、回执和独立快照。最小身份定位是模拟政策绑定，不是生产身份认证。
-- `runtime.py / context.py / cli.py`：共享 run_turn、消息恢复、受控上下文、本地交互与显式确认。
-- `dataset.py / user_script.py / evaluation.py / frozen.py`：派生与划分、角色可见范围、评分/聚合、配置漂移拒绝；语义复核由助手辅助，非独立人工标注。
-- `tests/`：确定性回归，脚本模型只验证路径；真实模型证据另外保存。T8 的 `examples/confirmation_change.py` 是直接应用层演示，不是生产 Agent 或评测新分支。
+## 核心新增代码
 
-## 可核对的结果
+- [environment.py](../src/retailflow/environment.py)：身份、权限、提案、原参数确认、业务差异提交与执行回执。
+- [storage.py](../src/retailflow/storage.py)：本地事务、业务快照与会话状态。
+- [runtime.py](../src/retailflow/runtime.py)、[context.py](../src/retailflow/context.py)：共享运行入口、工具交互、历史恢复、上下文与预算。
+- [dataset.py](../src/retailflow/dataset.py)、[user_script.py](../src/retailflow/user_script.py)、[evaluation.py](../src/retailflow/evaluation.py)：任务派生、角色隔离、独立业务状态与结果检查。
 
-T1 小工具烟测 10/10 是历史可行性结果，不等于 retail Task 成功率。T8 重新跑了真实模型确认取消和按政策解释拒绝；参数变更/旧确认失效则通过真实业务方法的直接应用演示及 4 个专项回归证明。完整工程回归 104 个通过。正式 Dev 各 0/9、Test 各 0/4；没有改写这些结果，也没有提升幅度。
+模型决策与应用保护分别验证，不能从确定性测试或单次演示推断业务任务普遍可靠。项目不包含真实电商支付、生产身份认证、网页、多 Agent 或模型训练。
 
-模型回复不代表执行证据。支付日志、确认回执、其他对象不变与必要沟通分别检查。CLI 与批量任务共用运行时；评测没有直接安排参考工具链。没有新增多 Agent、MCP、训练、网页或部署服务。
+## 开发与审查
 
-## 许可证与公开内容
+实现、排障和部分语义复核使用了 Codex 辅助。复用组件和模型能力归属各自来源；辅助语义复核不属于独立人工标注。历史实验及修复记录保留原配置与证据，不因展示文档修订而改变。
 
-[react-agent MIT 通知](../LICENSES/react-agent-MIT.txt) 和 [τ2-bench MIT 通知](../vendor/tau_retail/source/LICENSE) 均保留。仓库 LICENSE 表明上游仓库许可，但原始数据文件没有独立文件级许可声明；本项目记录来源、固定 commit、改动和这一限制，不扩大解释为所有数据再分发权已独立核定。用户已明确同意公开固定模拟数据和全部派生题以便复现。
+## 许可
 
-RetailFlow 新增代码尚未选定单独许可证，不因 GitHub 公开就自动变成 MIT；未经用户选择，不擅自给全部原创文件加许可证。公开模拟姓名、订单和付款标识属于特意保留的上游内容，不应替换为真实客户数据。
+[react-agent MIT 通知](../LICENSES/react-agent-MIT.txt) 和 [τ2-bench MIT 通知](../vendor/tau_retail/source/LICENSE)保留。原始 retail 数据文件没有独立文件级许可声明，具体来源与限制记录在清单中；模拟数据不应替换为真实客户信息。
 
-## 开发说明
-
-实现与排障使用了 Codex 辅助。上表描述的是仓库实际改动，不表示全部代码从零独立编写；业务方法、模板和模型能力仍归属各自来源。
+新增代码尚未选择独立许可证，GitHub 公开不自动意味着全部内容采用 MIT。
