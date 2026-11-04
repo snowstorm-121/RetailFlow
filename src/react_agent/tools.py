@@ -74,3 +74,17 @@ def native_dialogue_examples():
                         name="ask_user", tool_call_id=ident, additional_kwargs=marked),
         ])
     return messages
+
+
+def retail_tools_for_session(session):
+    """Offer tools for the last inspected order; dispatch still checks all permissions."""
+    names = {"ask_user", "transfer_to_human_agents"}
+    if not session.get("user_id"):
+        names.update({"find_user_id_by_email", "find_user_id_by_name_zip"})
+    else:
+        names.update({"get_user_details", "get_order_details", "get_product_details"})
+        write = {"pending": "cancel_pending_order", "delivered": "return_delivered_order_items"}.get(
+            session.get("target_order_status"))
+        if write:
+            names.add(write)
+    return [tool for tool in RETAIL_TOOLS if tool["function"]["name"] in names]

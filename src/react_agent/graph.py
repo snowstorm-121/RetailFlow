@@ -16,7 +16,7 @@ from langgraph.runtime import Runtime
 
 from react_agent.context import Context
 from react_agent.state import InputState, RetailState, State
-from react_agent.tools import ASK_USER_FIELDS, RETAIL_TOOLS, TOOLS, native_dialogue_examples
+from react_agent.tools import ASK_USER_FIELDS, RETAIL_TOOLS, TOOLS, native_dialogue_examples, retail_tools_for_session
 from retailflow.tools import IDENTITY_TOOLS, WRITE_TOOLS, valid_arguments
 from react_agent.utils import load_chat_model
 
@@ -171,7 +171,9 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         missing_identity = (isinstance(latest, ToolMessage) and
                             json.loads(latest.content).get("code") == "MISSING_USER_INFORMATION")
         information_repair = repair and latest.additional_kwargs["protocol_feedback"] == "information"
-        offered = [RETAIL_TOOLS[-1]] if information_repair or missing_identity else RETAIL_TOOLS
+        offered = retail_tools_for_session(session) if config.get("state_tool_filter", False) else RETAIL_TOOLS
+        if information_repair or missing_identity:
+            offered = [RETAIL_TOOLS[-1]]
         model = model_factory(runtime.context).bind_tools(offered)
         if information_repair and session.get("user_id"):
             # Retry only the failed information request. Replaying it as the latest
