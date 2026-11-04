@@ -110,7 +110,7 @@ async def chat(thread_id: str, config_path: Path, message: str | None = None) ->
                 event = {"kind": "confirmation", "proposal_id": result["request"]["proposal_id"], "accepted": choice == "yes"}
                 result = await run_turn(thread_id, event, config)
                 continue
-            if result["status"] == "failed":
+            if result["status"] in {"failed", "budget_exceeded"}:
                 return 1
             break
         if message is not None and result["status"] != "needs_input":

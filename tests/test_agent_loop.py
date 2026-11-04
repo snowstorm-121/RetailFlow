@@ -1,5 +1,7 @@
 import asyncio
 import json
+
+import pytest
 from pathlib import Path
 
 from langchain_core.messages import AIMessage, ToolMessage
@@ -199,3 +201,17 @@ def test_handoff_marker_does_not_claim_a_human_was_contacted(tmp_path):
     result = asyncio.run(worker.run_turn("a", {"kind": "message", "text": "I need an exchange, I am Yara Muller, 85041."}, config))
     assert result["status"] == "handed_off"
     assert "no human" in result["text"].lower()
+
+
+@pytest.mark.parametrize("status", ["budget_exceeded", "failed"])
+def test_cli_reports_unsuccessful_execution_to_shell(tmp_path, monkeypatch, status):
+    from retailflow import cli
+
+    config = tmp_path / "config.json"
+    config.write_text("{}")
+
+    async def stopped(thread, event, settings):
+        return {"status": status, "text": "Execution stopped.", "trace_path": "trace.json"}
+
+    monkeypatch.setattr(cli, "run_turn", stopped)
+    assert asyncio.run(cli.chat("a", config, "Query my order")) == 1

@@ -1,3 +1,4 @@
+import pytest
 import asyncio
 import json
 
@@ -281,11 +282,16 @@ def test_confirmed_return_receipt_does_not_claim_a_settled_refund(tmp_path):
     assert outcome['return_details']['items'] == [{'item_id': '4202497723', 'name': 'Headphones'}]
 
 
-def test_claimed_return_request_without_tool_result_requires_native_proposal(tmp_path):
+@pytest.mark.parametrize("claim", [
+    "A return request has been created for the headphones.",
+    "A return request for the headphones has been created.",
+    "A return request for the headphones was submitted.",
+])
+def test_claimed_return_request_without_tool_result_requires_native_proposal(tmp_path, claim):
     worker, _, config = runtime(tmp_path, [
         call('find_user_id_by_name_zip', {'first_name': 'Yusuf', 'last_name': 'Rossi', 'zip': '19122'}, 'identity'),
         call('get_order_details', {'order_id': '#W2378156'}, 'order'),
-        AIMessage(content='A return request has been created for the headphones.'),
+        AIMessage(content=claim),
         call('return_delivered_order_items', {'order_id': '#W2378156', 'item_ids': ['4202497723'],
                                              'payment_method_id': 'credit_card_9513926'}, 'proposal'),
     ])
@@ -293,3 +299,20 @@ def test_claimed_return_request_without_tool_result_requires_native_proposal(tmp
         'Yusuf Rossi, 19122. Return the headphones in #W2378156 to my original payment method.'}, config))
     assert result['status'] == 'needs_confirmation'
     assert worker.environment.get_order('a', '#W2378156')['status'] == 'delivered'
+
+
+@pytest.mark.parametrize("text", [
+    "A return request for the headphones has not been created.",
+    "A return request for the headphones can be created after confirmation.",
+])
+def test_uncreated_request_explanation_does_not_trigger_proposal_repair(tmp_path, text):
+    worker, _, config = runtime(tmp_path, [
+        call('find_user_id_by_name_zip', {'first_name': 'Yusuf', 'last_name': 'Rossi', 'zip': '19122'}, 'identity'),
+        call('get_order_details', {'order_id': '#W2378156'}, 'order'),
+        AIMessage(content=text),
+    ])
+    result = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text':
+        'Yusuf Rossi, 19122. Check #W2378156.'}, config))
+    assert result['status'] == 'answered'
+    assert result['usage']['dialogue_repairs'] == 0
+    assert worker.environment.pending_proposal('a') is None
