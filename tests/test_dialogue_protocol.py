@@ -316,3 +316,22 @@ def test_uncreated_request_explanation_does_not_trigger_proposal_repair(tmp_path
     assert result['status'] == 'answered'
     assert result['usage']['dialogue_repairs'] == 0
     assert worker.environment.pending_proposal('a') is None
+
+
+@pytest.mark.parametrize('text', [
+    '{"action":"cancel_pending_order","order_id":"#W5056519","reason":"ordered by mistake"}',
+    '```json\n{"action":"cancel_pending_order","order_id":"#W5056519"}\n```',
+])
+def test_plain_action_json_is_failure_not_a_completed_turn(tmp_path, text):
+    worker, _, config = runtime(tmp_path, [AIMessage(content=text)])
+    result = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text': 'Cancel my order.'}, config))
+    assert result['status'] == 'failed'
+    assert result['failure_reason'] == 'non_native_tool_action'
+    assert result['usage']['tool_calls'] == 0
+    assert worker.environment.pending_proposal('a') is None
+
+
+def test_ordinary_json_answer_is_not_a_tool_action(tmp_path):
+    worker, _, config = runtime(tmp_path, [AIMessage(content='{"status":"pending"}')])
+    result = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text': 'Hello'}, config))
+    assert result['status'] == 'answered'

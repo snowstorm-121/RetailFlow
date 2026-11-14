@@ -132,6 +132,22 @@ def _requests_information(text):
 
 
 
+
+def _is_text_tool_action(text):
+    """Recognize the observed malformed action envelope; never execute its contents."""
+    if not isinstance(text, str):
+        return False
+    candidate = text.strip()
+    if candidate.startswith("```json\n") and candidate.endswith("```"):
+        candidate = candidate[8:-3].strip()
+    try:
+        value = json.loads(candidate)
+    except ValueError:
+        return False
+    return (isinstance(value, dict) and isinstance(value.get("action"), str)
+            and value["action"] in {tool["function"]["name"] for tool in RETAIL_TOOLS})
+
+
 def _identity_is_grounded(args, messages):
     supplied = "\n".join(m.content for m in messages if isinstance(m, HumanMessage) and isinstance(m.content, str)).casefold()
     return all(re.search(r"(?<!\w)" + re.escape(value.casefold()) + r"(?!\w)", supplied) for value in args.values())
@@ -228,6 +244,9 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             return {"messages": [response], "model_calls": state["model_calls"] + 1,
                     "status": "failed", "failure_reason": "invalid_tool_call"}
         if not response.tool_calls:
+            if _is_text_tool_action(response.content):
+                return {"messages": [response], "model_calls": state["model_calls"] + 1,
+                        "status": "failed", "failure_reason": "non_native_tool_action"}
             if information_repair:
                 return {"messages": [response], "model_calls": state["model_calls"] + 1,
                         "status": "failed", "failure_reason": "information_request_not_structured"}
