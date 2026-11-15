@@ -161,6 +161,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
 
     config = config or {}
     metrics.setdefault("dialogue_repairs", 0)
+    metrics.setdefault("receipt_reviews", 0)
 
     def persist(state, messages):
         if persist_messages:
@@ -204,6 +205,18 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                               *examples, *visible]
         else:
             model_messages = [SystemMessage(content=prompt), *examples, *visible]
+        if repair == "receipt_review":
+            prompt = ("Correct the draft using the verified receipt. Preserve and answer the customer's additional questions "
+                      "using the supplied history and facts. Do not invent dates, facts or actions. "
+                      "A return request is not a settled refund; no arrival date is established. "
+                      "No further items in the same order can be returned, including unselected items. "
+                      "Output only the corrected customer-facing answer. If information is unavailable, say so.")
+            visible = [HumanMessage(content=json.dumps({"draft": state["messages"][-2].content,
+                "history": messages_to_dict([m for m in visible if not isinstance(m, SystemMessage)]),
+                "receipt": next(m.content for m in reversed(state["messages"]) if m.additional_kwargs.get("application_result"))}, ensure_ascii=False))]
+            model_messages = [SystemMessage(content=prompt), *visible]
+            offered = []
+            model = model_factory(runtime.context).bind_tools(offered)
         if len(json.dumps(messages_to_dict(visible), ensure_ascii=False)) // 4 + 1 > budget:
             return {"status": "budget_exceeded", "failure_reason": "context_budget"}
         if before_model:
@@ -243,6 +256,11 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         if response.invalid_tool_calls:
             return {"messages": [response], "model_calls": state["model_calls"] + 1,
                     "status": "failed", "failure_reason": "invalid_tool_call"}
+        if repair == "receipt_review":
+            if response.tool_calls or not isinstance(response.content, str) or not response.content.strip() or _is_text_tool_action(response.content):
+                return {"messages": [response], "model_calls": state["model_calls"] + 1,
+                        "status": "failed", "failure_reason": "receipt_review_invalid_response"}
+            return {"messages": [response], "model_calls": state["model_calls"] + 1, "status": "answered"}
         if not response.tool_calls:
             if _is_text_tool_action(response.content):
                 return {"messages": [response], "model_calls": state["model_calls"] + 1,
@@ -280,6 +298,14 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 feedback = SystemMessage(content=feedback_text, additional_kwargs={"protocol_feedback": kind})
                 persist(state, [response, feedback])
                 return {"messages": [response, feedback], "model_calls": state["model_calls"] + 1, "status": "repairing"}
+        if (not response.tool_calls and config.get("receipt_answer_review", False)
+                and not metrics["receipt_reviews"] and session.get("target_order_status") == "return requested"
+                and any(m.additional_kwargs.get("application_result") for m in state["messages"])):
+            metrics["receipt_reviews"] += 1
+            feedback = SystemMessage(content="Review the draft against the committed return receipt.",
+                                     additional_kwargs={"protocol_feedback": "receipt_review"})
+            persist(state, [response, feedback])
+            return {"messages": [response, feedback], "model_calls": state["model_calls"] + 1, "status": "repairing"}
         return {"messages": [response], "model_calls": state["model_calls"] + 1,
                 "status": "running" if response.tool_calls else "answered"}
 

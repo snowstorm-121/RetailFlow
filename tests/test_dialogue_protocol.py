@@ -335,3 +335,39 @@ def test_ordinary_json_answer_is_not_a_tool_action(tmp_path):
     worker, _, config = runtime(tmp_path, [AIMessage(content='{"status":"pending"}')])
     result = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text': 'Hello'}, config))
     assert result['status'] == 'answered'
+
+
+@pytest.mark.parametrize("review_limit", [1, 6])
+@pytest.mark.parametrize("unexpected_tool", [False, True])
+def test_receipt_answer_review_is_metered_and_preserves_customer_questions(tmp_path, review_limit, unexpected_tool):
+    worker, model, config = runtime(tmp_path, [
+        call('find_user_id_by_name_zip', {'first_name': 'Yusuf', 'last_name': 'Rossi', 'zip': '19122'}, 'identity'),
+        call('get_order_details', {'order_id': '#W2378156'}, 'order'),
+        call('return_delivered_order_items', {'order_id': '#W2378156', 'item_ids': ['4202497723'],
+                                             'payment_method_id': 'credit_card_9513926'}, 'proposal'),
+        AIMessage(content='Refund arrives in 5 days. Remaining items can be returned later.'),
+        (call('get_order_details', {'order_id': '#W2378156'}, 'unexpected') if unexpected_tool else
+         AIMessage(content='Return requested; no refund date is established. No further returns for this order.')),
+    ], receipt_answer_review=True)
+    first = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text':
+        'Yusuf Rossi, 19122. Return headphones in #W2378156 to original payment. Can I return other items later?'}, config))
+    config['max_model_calls_per_turn'] = review_limit
+    result = asyncio.run(worker.run_turn('a', {'kind': 'confirmation',
+        'proposal_id': first['request']['proposal_id'], 'accepted': True}, config))
+    if review_limit == 1:
+        assert result['status'] == 'budget_exceeded'
+        assert result['usage']['model_calls'] == 1
+        assert worker.environment.get_order('a', '#W2378156')['status'] == 'return requested'
+        return
+    if unexpected_tool:
+        assert result['status'] == 'failed'
+        assert result['failure_reason'] == 'receipt_review_invalid_response'
+        assert result['usage']['model_calls'] == 2
+        assert result['usage']['tool_calls'] == 1  # Only the already confirmed write.
+        return
+    assert 'no refund date' in result['text']
+    assert result['usage']['model_calls'] == 2
+    assert result['usage']['receipt_reviews'] == 1
+    assert model.bound_tools == []
+    assert 'Can I return other items later?' in model.inputs[-1][-1].content
+    assert worker.environment.get_order('a', '#W2378156')['status'] == 'return requested'

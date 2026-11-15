@@ -168,7 +168,8 @@ class RetailRuntime:
             context_values = {field.name: config[field.name] for field in fields(Context) if field.name in config}
             context = Context(**context_values, system_prompt=RETAIL_PROMPT)
             graph = make_retail_graph(self.environment, thread_id, self.model_factory, metrics,
-                                      int(config.get("max_model_calls_per_turn", 12)), config,
+                                      int(config.get("max_model_calls_per_turn", 12)),
+                                      {**config, "receipt_answer_review": bool(config.get("receipt_answer_review") and confirmed_outcome)},
                                       persist_messages=lambda current: self._save_messages(thread_id, current),
                                       before_model=before_model)
             try:
