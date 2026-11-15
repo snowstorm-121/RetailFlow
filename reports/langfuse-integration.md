@@ -10,8 +10,16 @@
 - 完整工程测试 159 项通过；最后调整初始化失败隔离后，6 项观测专项测试再次通过。
 - uv pip check 通过；.env.langfuse 被 Git 忽略，示例文件只有空密钥。
 
-## 尚未验证
+## 日本区 Cloud 实测
 
-本机 Public Key 和 Secret Key 仍为空，未完成日本区项目鉴权、真实上传或控制台可见性验收。不能声称 Langfuse Cloud 已连接成功。
+用户配置本机密钥后，`examples/langfuse_check.py` 项目鉴权通过。随后在独立业务数据库和新 Session 中执行一次真实订单查询，使用已有本地 `qwen3:4b-instruct-2507-q4_K_M`，没有使用云模型。
 
-配置项目后，先运行 examples/langfuse_check.py，再按 docs/langfuse.md 加载环境变量并执行一次最小对话。检查控制台 Trace ID、Session 关联和 generation 子节点，才算完成端到端接入。旧实验冻结文件保留不变；新增依赖和代码会改变冻结环境，不能冒称仍为旧实验版本。
+上传后通过 Langfuse Cloud observations API 回读验证，而非仅凭 SDK flush 返回判断成功：
+
+- 共 18 条观测，包括 4 个 ChatOllama generation、2 个 tools 图节点及 root。
+- 所有观测属于同一 Trace、同一 Session；所有非 root 节点的父节点均存在。
+- 本地 JSON 的 Trace ID 与 Cloud 一致；generation 包含实际 token 用量。
+- root 正确记录 ERROR、业务状态 failed 和 `information_request_not_structured`。本次接入验证成功，但订单查询任务失败，不代表业务指标提升。
+- Cloud 观测均为非公开。公开仓库仅保留不含密钥、项目标识和业务原文的验证摘要：[cloud-smoke-result.json](evidence/langfuse-integration/cloud-smoke-result.json)。完整回读数据保存在被忽略的本地 artifacts 目录。
+
+本次已完成鉴权、实际上传及 Cloud API 可读验收，未进行浏览器控制台视觉验收，也未重新运行完整业务评测。旧实验冻结文件保留不变；新增依赖和代码会改变冻结环境，不能冒称仍为旧实验版本。
