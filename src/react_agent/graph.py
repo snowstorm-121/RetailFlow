@@ -353,6 +353,14 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             status = {"CONFIRMATION_REQUIRED": "needs_confirmation", "POLICY_DENIED": "refused",
                       "OK": "handed_off" if name == "transfer_to_human_agents" else "running"}.get(result["code"], "running")
             request = result.get("proposal") if status == "needs_confirmation" else None
+        if config.get("profile_order_summaries", False) and name == "get_user_details" and result["ok"]:
+            session = environment.load_session(thread_id)
+            result["data"]["order_summaries"] = [
+                {"order_id": order_id, "status": order["status"],
+                 "items": [{key: item[key] for key in ("name", "item_id", "product_id", "options")}
+                           for item in order["items"]]}
+                for order_id in result["data"]["orders"]
+                if (order := session["business"]["orders"][order_id])["user_id"] == session["user_id"]]
         metrics["tool_seconds"] += time.perf_counter() - start
         metrics["tool_calls"] += 1 + retries
         message = ToolMessage(content=json.dumps(result, ensure_ascii=False), name=name, tool_call_id=call["id"],

@@ -1,0 +1,75 @@
+{
+  "task_id": "tau-retail-24",
+  "category": "multiturn_change",
+  "status": "answered",
+  "requires_write": false,
+  "success": false,
+  "objective_passed": true,
+  "state_passed": true,
+  "state_failures": [],
+  "policy_passed": true,
+  "policy_failures": [],
+  "required_info_literal_match": false,
+  "review_required": true,
+  "communication_review": null,
+  "model_tool_requests": 4,
+  "legal_tool_requests": 4,
+  "blocked_requests": 0,
+  "variant": "B2",
+  "thread_id": "B2-tau-retail-24-3d5a60f0",
+  "failure_reason": "communication_review_pending",
+  "failure_category": null,
+  "fault_registered": false,
+  "fault_triggered": 0,
+  "usage": {
+    "model_calls": 6,
+    "tool_calls": 4,
+    "retries": 0,
+    "dialogue_repairs": 1,
+    "input_tokens": 11044,
+    "output_tokens": 408
+  },
+  "elapsed_seconds": 44.77,
+  "memory": {
+    "python_peak_rss_bytes": 121651200,
+    "ollama_observed_rss_bytes": 793755648,
+    "ollama_reported_loaded_model_bytes": 4119016480
+  },
+  "trace_paths": [
+    "artifacts/order-summaries-20261115/review/traces/20261115T091304Z-2c6b0723.json",
+    "artifacts/order-summaries-20261115/review/traces/20261115T091332Z-7476df05.json",
+    "artifacts/order-summaries-20261115/review/traces/20261115T091344Z-0a9ce1f2.json"
+  ],
+  "events": [
+    {
+      "type": "user_event",
+      "kind": "message",
+      "text": "I'd like to cancel the grill I ordered."
+    },
+    {
+      "type": "user_event",
+      "kind": "message",
+      "text": "You are Sofia Hernandez, and you live in Seattle, WA, 98193."
+    },
+    {
+      "type": "user_event",
+      "kind": "message",
+      "text": "I ordered it by mistake."
+    },
+    {
+      "type": "assistant_message",
+      "text": "Thank you for confirming.  \n\nI will now cancel your pending order **#W3561391** (Grill - Gas, Portable) because it was ordered by mistake.  \n\nThe cancellation proposal is now staged and ready for confirmation.  \n\nWould you like me to proceed with this action?  \n\n*(Note: Cancellation will take effect once confirmed. No refund will be issued for this order.)*"
+    }
+  ],
+  "first_observed_error": null,
+  "state_hash_before": "f08162ba14d2d3ce9ebe4ebc0fa3cd4bdc2876eaaf9d3411802cdba96ea1f41a",
+  "state_hash_after": "f08162ba14d2d3ce9ebe4ebc0fa3cd4bdc2876eaaf9d3411802cdba96ea1f41a",
+  "expected_checks": {
+    "communicate_info": [
+      "polyester",
+      "cotton"
+    ],
+    "orders": [],
+    "transfer_to_human": false
+  }
+}
