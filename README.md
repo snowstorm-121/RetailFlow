@@ -2,7 +2,7 @@
 
 本地零售业务 Agent，基于 LangGraph、Ollama 和固定版 τ2-bench retail 模拟环境，支持订单查询、取消与退货。
 
-[业务演示](#业务演示) · [主要改造](#主要改造) · [执行流程](#执行流程) · [快速开始](#快速开始) · [设计说明](docs/architecture.md)
+[业务演示](#业务演示) · [主要改造](#主要改造) · [执行流程](#执行流程) · [快速开始](#快速开始) · [Langfuse 可观测性](#langfuse-可观测性) · [设计说明](docs/architecture.md)
 
 项目把模型决策和业务提交分开：模型选择工具、提出操作；应用检查身份和权限，展示具体提案，收到用户确认后才修改订单。SQLite 保存业务快照与执行回执，用于进程恢复和重复执行保护。
 
@@ -49,6 +49,7 @@ DEMO_THREAD="cancel-$(date +%Y%m%d-%H%M%S)"
 | 完整历史与模型上下文分开 | 保留用户要求、必要状态与完整工具消息块，同时控制输入预算 | [context.py](src/retailflow/context.py) |
 | 交互和批量运行共用入口 | 避免演示与业务任务执行两套逻辑 | [runtime.py](src/retailflow/runtime.py) |
 | 原生工具协议处理 | 缺信息时暂停交互；普通文本不冒充工具调用或执行结果 | [运行时](src/retailflow/runtime.py)、[图节点](src/react_agent/graph.py) |
+| Langfuse 运行轨迹 | 按会话查看模型调用、工具节点与失败原因，并关联本地日志 | [observability.py](src/retailflow/observability.py) |
 
 ## 执行流程
 
@@ -84,6 +85,49 @@ curl -sS http://127.0.0.1:11434/api/version
 ```
 
 `uv sync` 可能联网下载解释器和依赖；Ollama 服务和完整模型标签需另行准备，项目不会自动下载模型。环境就绪后运行上面的业务演示。工具定义和模拟业务为英文，演示也使用英文。
+
+## Langfuse 可观测性
+
+已接入 **Langfuse Cloud 日本区**，用于复查 Agent 的实际执行过程。模型仍由本地 Ollama 推理；Langfuse 接收运行轨迹，不参与模型推理或业务决策。上报默认关闭，可按需启用。
+
+| 观察层级 | 可以查看的内容 |
+| --- | --- |
+| Session | 同一个 thread 的多轮交互，便于追踪追问、提案和确认过程 |
+| Trace | 每次用户事件的输入、最终状态与失败原因；Trace ID 与本地 JSON 对应 |
+| 模型调用 | ChatOllama 输入输出、耗时，以及模型提供的 token 用量 |
+| 工具执行 | LangGraph 工具节点、工具请求与结果；图外确认写操作记录在根节点的执行回执中 |
+
+例如，订单查询中途停止时，可以沿 Trace 查看模型选择了什么工具、工具返回了什么，再对照最终失败原因定位问题。工具按图节点展示，不将每个 Python 方法包装成独立 tool span。
+
+### 启用方式
+
+在项目根目录安装可选依赖（可能联网下载依赖）：
+
+```bash
+uv sync --locked --extra observability --python 3.12
+```
+
+参照 [.env.langfuse.example](.env.langfuse.example) 创建本机 `.env.langfuse`；已有文件直接编辑，不覆盖。填写自己 Langfuse 项目的 Public Key、Secret Key，服务地址使用 `https://jp.cloud.langfuse.com`。密钥文件被 Git 忽略。
+
+```bash
+# 仅检查项目鉴权，不调用模型或上传业务轨迹
+.venv/bin/python examples/langfuse_check.py
+
+# 应用不会自动读取 .env 文件，需在当前终端加载
+set -a
+source .env.langfuse
+set +a
+
+.venv/bin/python -m retailflow.cli chat \
+  --thread "langfuse-demo-$(date +%Y%m%d-%H%M%S)" \
+  --config configs/local.json --message 'Hello.'
+```
+
+运行后，用 CLI 输出的 Trace ID 在 Langfuse 中定位记录；同一会话继续交互时复用该 thread。关闭上报使用 `export RETAILFLOW_LANGFUSE_ENABLED=false`。
+
+日本区已完成真实本地模型轨迹上传与 Cloud API 回读验证，包括 Session 关联、父子节点、本地 Trace ID 对应及失败状态记录。观测链路可用不代表业务任务成功；业务结果仍以实际状态和回执为准。
+
+启用后，消息、模型上下文和模拟业务数据会上传到 Cloud；当前没有自动个人信息脱敏，不应输入真实客户资料或秘密。上报失败不会自动重放业务操作，本地日志仍保留。完整配置、记录范围和故障边界见 [Langfuse 接入指南](docs/langfuse.md)。
 
 ## 设计与源码
 
