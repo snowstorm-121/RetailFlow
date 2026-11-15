@@ -99,6 +99,8 @@ async def chat(thread_id: str, config_path: Path, message: str | None = None) ->
         while True:
             print(f"[{result['status']}] {result['text']}")
             print(f"trace: {result['trace_path']}")
+            if result.get("langfuse_trace_id"):
+                print(f"Langfuse trace ID: {result['langfuse_trace_id']}")
             if result["status"] == "needs_confirmation":
                 try:
                     choice = input("Confirm this exact action? Type yes or no: ").strip().lower()

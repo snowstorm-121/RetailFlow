@@ -71,6 +71,11 @@ class RetailRuntime:
                        "ON CONFLICT(thread) DO UPDATE SET messages_json = excluded.messages_json", (thread_id, payload))
 
     async def run_turn(self, thread_id: str, user_event: dict, config: dict) -> dict:
+        from retailflow.observability import trace_turn
+        return await trace_turn(thread_id, user_event, config,
+                                lambda settings: self._run_turn(thread_id, user_event, settings))
+
+    async def _run_turn(self, thread_id: str, user_event: dict, config: dict) -> dict:
         start = check_start = time.perf_counter()
         initial_state_ref = config.get("initial_state_ref") or f"retail-db@{hashlib.sha256(RETAIL_DB_PATH.read_bytes()).hexdigest()}"
         self.environment.create_session(thread_id, initial_state_ref)
@@ -175,7 +180,7 @@ class RetailRuntime:
             try:
                 state = await asyncio.wait_for(graph.ainvoke({"messages": messages, "status": "running", "request": None,
                                              "model_calls": 0, "failure_reason": None},
-                                            context=context, config={"recursion_limit": 2 * int(config.get("max_model_calls_per_turn", 12)) + 4}),
+                                            context=context, config={"callbacks": config.get("_langfuse_callbacks", []), "recursion_limit": 2 * int(config.get("max_model_calls_per_turn", 12)) + 4}),
                                                timeout=max(0.001, deadline - time.time()))
                 messages = state["messages"]
                 status, request, failure_reason = state["status"], state["request"], state["failure_reason"]
@@ -239,6 +244,8 @@ class RetailRuntime:
                  "request": request, "failure_reason": failure_reason, "state_hash_before": before,
                  "state_hash_after": after, "messages": messages_to_dict(messages), "usage": metrics,
                  "elapsed_seconds": round(time.perf_counter() - start, 3)}
+        if config.get("_langfuse_trace_id"):
+            trace["langfuse_trace_id"] = config["_langfuse_trace_id"]
         trace_path.write_text(json.dumps(trace, ensure_ascii=False, indent=2))
         return {"status": status, "text": text, "request": request, "trace_path": str(trace_path),
                 "usage": metrics, "failure_reason": failure_reason}

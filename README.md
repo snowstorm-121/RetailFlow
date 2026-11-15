@@ -88,6 +88,7 @@ curl -sS http://127.0.0.1:11434/api/version
 ## 设计与源码
 
 - [执行架构与设计取舍](docs/architecture.md)：原生调用、提案、事务、恢复与上下文。
+- [Langfuse Cloud 接入](docs/langfuse.md)：可选会话追踪、模型调用与工具节点观测。
 - [演示操作指南](docs/demos.md)：取消、参数变更、政策拒绝，以及常见故障。
 - [来源与二次开发](reports/contribution.md)：框架、业务方法与新增模块的范围。
 - [固定上游清单](UPSTREAM.md)：版本、适配文件与许可信息。
