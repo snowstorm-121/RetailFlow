@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
-from langchain_core.messages import HumanMessage, SystemMessage, messages_from_dict, messages_to_dict
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, messages_from_dict, messages_to_dict
 
 from react_agent.context import Context
 from react_agent.graph import make_retail_graph
@@ -209,6 +209,22 @@ class RetailRuntime:
                 else:
                     failure_reason = type(exc).__name__
 
+        if (config.get("return_receipt_response", False) and confirmed_outcome
+                and status == "answered" and confirmed_outcome.get("data", {}).get("status") == "return requested"):
+            order = confirmed_outcome["data"]
+            selected = set(order["return_items"])
+            returned = ", ".join(f"{item['name']} ({item['item_id']})" for item in order["items"] if item["item_id"] in selected)
+            remaining = ", ".join(f"{item['name']} ({item['item_id']})" for item in order["items"] if item["item_id"] not in selected)
+            metrics["original_model_answer"] = text
+            text = (f"Return requested for order {order['order_id']}: {returned}. "
+                    f"Selected refund method: {order['return_payment_method_id']}. "
+                    "The refund is not settled. No refund arrival date is established. "
+                    "This order is not eligible for another return or amendment after this request. ")
+            if remaining:
+                text += f"Remaining items were not returned and are not eligible for another return in this order: {remaining}. "
+            text += "The policy expects return instructions by email; this local application sends no real email."
+            messages.append(AIMessage(content=text, additional_kwargs={"application_rendered_receipt": True}))
+            metrics["application_rendered_receipt"] = True
         if confirmed_outcome and status in {"failed", "budget_exceeded"}:
             text = "The confirmed action is committed in the local business state. Reply generation stopped: " + text
         self._save_messages(thread_id, messages)

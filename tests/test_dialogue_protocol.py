@@ -371,3 +371,25 @@ def test_receipt_answer_review_is_metered_and_preserves_customer_questions(tmp_p
     assert model.bound_tools == []
     assert 'Can I return other items later?' in model.inputs[-1][-1].content
     assert worker.environment.get_order('a', '#W2378156')['status'] == 'return requested'
+
+
+def test_return_receipt_response_uses_committed_items_and_policy(tmp_path):
+    worker, _, config = runtime(tmp_path, [
+        call('find_user_id_by_name_zip', {'first_name': 'Yusuf', 'last_name': 'Rossi', 'zip': '19122'}, 'identity'),
+        call('get_order_details', {'order_id': '#W2378156'}, 'order'),
+        call('return_delivered_order_items', {'order_id': '#W2378156', 'item_ids': ['4202497723'],
+                                             'payment_method_id': 'credit_card_9513926'}, 'proposal'),
+        AIMessage(content='Refund arrives in 5 days. Remaining items can be returned later.'),
+    ], return_receipt_response=True)
+    first = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text':
+        'Yusuf Rossi, 19122. Return headphones in #W2378156 to original payment.'}, config))
+    assert first['status'] == 'needs_confirmation'
+    result = asyncio.run(worker.run_turn('a', {'kind': 'confirmation',
+        'proposal_id': first['request']['proposal_id'], 'accepted': True}, config))
+    assert '5 days' not in result['text']
+    assert 'Headphones' in result['text']
+    assert 'No refund arrival date' in result['text']
+    assert 'not eligible for another return' in result['text']
+    assert result['usage']['model_calls'] == 1
+    assert '5 days' in result['usage']['original_model_answer']
+    assert worker.load_messages('a')[-1].content == result['text']
