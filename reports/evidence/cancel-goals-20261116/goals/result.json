@@ -1,0 +1,85 @@
+{
+  "task_id": "tau-retail-113",
+  "category": "legal_write",
+  "status": "failed",
+  "requires_write": true,
+  "success": false,
+  "objective_passed": false,
+  "state_passed": false,
+  "state_failures": [
+    "missing_confirmation",
+    "target_state_mismatch"
+  ],
+  "policy_passed": true,
+  "policy_failures": [],
+  "required_info_literal_match": true,
+  "review_required": false,
+  "communication_review": null,
+  "model_tool_requests": 9,
+  "legal_tool_requests": 9,
+  "blocked_requests": 2,
+  "variant": "B2",
+  "thread_id": "B2-tau-retail-113-3a16a342",
+  "failure_reason": "cancel_goal_incomplete",
+  "failure_category": "budget_environment",
+  "fault_registered": true,
+  "fault_triggered": 1,
+  "usage": {
+    "model_calls": 11,
+    "tool_calls": 8,
+    "retries": 1,
+    "dialogue_repairs": 2,
+    "input_tokens": 19030,
+    "output_tokens": 631
+  },
+  "elapsed_seconds": 76.002,
+  "memory": {
+    "python_peak_rss_bytes": 123961344,
+    "ollama_observed_rss_bytes": 666550272,
+    "ollama_reported_loaded_model_bytes": 4119016480
+  },
+  "trace_paths": [
+    "artifacts/cancel-goals-20261116/goals/traces/20261116T135522Z-1391e6dc.json",
+    "artifacts/cancel-goals-20261116/goals/traces/20261116T135629Z-1e0e9eab.json"
+  ],
+  "events": [
+    {
+      "type": "user_event",
+      "kind": "message",
+      "text": "I want to cancel all of my pending orders."
+    },
+    {
+      "type": "user_event",
+      "kind": "message",
+      "text": "You name is Yara Muller and your zip code is 85041."
+    }
+  ],
+  "first_observed_error": {
+    "tool_call_id": "e3f40c7b-19af-4bec-aae7-5413589a3a4d",
+    "name": "get_user_details",
+    "args": {
+      "user_id": "yara_muller_8652"
+    },
+    "code": "TEMPORARY_FAILURE",
+    "message": "Registered temporary read failure before execution.",
+    "attempt": 1
+  },
+  "state_hash_before": "f08162ba14d2d3ce9ebe4ebc0fa3cd4bdc2876eaaf9d3411802cdba96ea1f41a",
+  "state_hash_after": "f08162ba14d2d3ce9ebe4ebc0fa3cd4bdc2876eaaf9d3411802cdba96ea1f41a",
+  "expected_checks": {
+    "communicate_info": [],
+    "orders": [
+      {
+        "cancel_reason": "ordered by mistake",
+        "order_id": "#W5056519",
+        "status": "cancelled"
+      },
+      {
+        "cancel_reason": "ordered by mistake",
+        "order_id": "#W5995614",
+        "status": "cancelled"
+      }
+    ],
+    "transfer_to_human": false
+  }
+}

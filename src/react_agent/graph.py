@@ -154,10 +154,11 @@ def _identity_is_grounded(args, messages):
 
 
 def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_calls, config=None,
-                      persist_messages=None, before_model=None):
+                      persist_messages=None, before_model=None, goal_state=None, persist_goal=None):
     """Build the retail loop around the template's model → tool → model pattern."""
 
     from retailflow.context import ContextBudgetExceeded, build_model_context
+    from retailflow.cancel_goals import GOAL_TOOL, GOAL_PROMPT, validate_goal, goal_progress
 
     config = config or {}
     metrics.setdefault("dialogue_repairs", 0)
@@ -172,6 +173,22 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             return {"status": "budget_exceeded", "failure_reason": "model_call_budget"}
         prompt = runtime.context.system_prompt.format(system_time=datetime.now(tz=UTC).isoformat())
         session = environment.load_session(thread_id)
+        planning = goal_state is not None and goal_state.get("needs_refresh", True)
+        progress = None
+        if goal_state is not None and not planning:
+            inventory = None
+            for message in state["messages"]:
+                if isinstance(message, ToolMessage) and message.name == "get_user_details":
+                    value = json.loads(message.content)
+                    if value.get("ok") and value["data"]["user_id"] == session.get("user_id"):
+                        inventory = value["data"]["orders"]
+            with environment.storage.transaction() as db:
+                receipts = db.execute("SELECT args_json, result_json FROM receipts WHERE thread = ? AND name = ?",
+                                      (thread_id, "cancel_pending_order")).fetchall()
+            committed = {json.loads(row["args_json"])["order_id"] for row in receipts if json.loads(row["result_json"]).get("ok")}
+            progress = goal_progress(goal_state, session.get("user_id"), session["business"], inventory, committed)
+            persist_goal()
+            prompt += "\nCancellation goal progress (not write authorization): " + json.dumps(progress)
         examples = native_dialogue_examples()
         example_tokens = len(json.dumps(messages_to_dict(examples))) // 4
         available = (int(runtime.context.num_ctx) - int(runtime.context.num_predict) -
@@ -191,6 +208,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         offered = retail_tools_for_session(session) if config.get("state_tool_filter", False) else RETAIL_TOOLS
         if information_repair or missing_identity:
             offered = [RETAIL_TOOLS[-1]]
+        if planning:
+            offered = [GOAL_TOOL]
         model = model_factory(runtime.context).bind_tools(offered)
         isolated_repair = config.get("isolated_information_repair", False)
         if information_repair and (session.get("user_id") or isolated_repair):
@@ -223,8 +242,17 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                        "from the tool results, and respect all exclusions and later corrections. If information is missing, "
                        "use ask_user. Do not output a simulated tool result or claim completion.")
             examples = []
-            visible = [HumanMessage(content=json.dumps({"events": events}, ensure_ascii=False),
+            payload = {"events": events}
+            if progress is not None:
+                payload["cancel_goal"] = progress
+            visible = [HumanMessage(content=json.dumps(payload, ensure_ascii=False),
                                     additional_kwargs={"protocol_retry_input": True})]
+            model_messages = [SystemMessage(content=prompt), *visible]
+        if planning:
+            prompt = GOAL_PROMPT
+            examples = []
+            visible = [HumanMessage(content=json.dumps({"customer_messages": [m.content for m in state["messages"]
+                       if isinstance(m, HumanMessage)]}, ensure_ascii=False))]
             model_messages = [SystemMessage(content=prompt), *visible]
         if repair == "receipt_review":
             prompt = ("Correct the draft using the verified receipt. Preserve and answer the customer's additional questions "
@@ -277,12 +305,25 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         if response.invalid_tool_calls:
             return {"messages": [response], "model_calls": state["model_calls"] + 1,
                     "status": "failed", "failure_reason": "invalid_tool_call"}
+        if planning and (len(response.tool_calls) != 1 or response.tool_calls[0]["name"] != "update_cancel_goal"):
+            return {"messages": [response], "model_calls": state["model_calls"] + 1,
+                    "status": "failed", "failure_reason": "cancel_goal_not_registered"}
         if repair == "receipt_review":
             if response.tool_calls or not isinstance(response.content, str) or not response.content.strip() or _is_text_tool_action(response.content):
                 return {"messages": [response], "model_calls": state["model_calls"] + 1,
                         "status": "failed", "failure_reason": "receipt_review_invalid_response"}
             return {"messages": [response], "model_calls": state["model_calls"] + 1, "status": "answered"}
         if not response.tool_calls:
+            if (progress is not None and not progress["complete"]
+                    and not _requests_information(response.content)):
+                if metrics["dialogue_repairs"] >= 1:
+                    return {"messages": [response], "model_calls": state["model_calls"] + 1,
+                            "status": "failed", "failure_reason": "cancel_goal_incomplete"}
+                metrics["dialogue_repairs"] += 1
+                feedback = SystemMessage(content="Cancellation goal remains incomplete. Use a native tool for the next step; each proposal needs confirmation.",
+                                         additional_kwargs={"protocol_feedback": "proposal"})
+                persist(state, [response, feedback])
+                return {"messages": [response, feedback], "model_calls": state["model_calls"] + 1, "status": "repairing"}
             if _is_text_tool_action(response.content):
                 return {"messages": [response], "model_calls": state["model_calls"] + 1,
                         "status": "failed", "failure_reason": "non_native_tool_action"}
@@ -348,6 +389,19 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         if name not in metrics["context_inputs"][-1]["tool_names"]:
             result = {"ok": False, "code": "INVALID_ARGUMENT", "message": "This tool was not offered in the current model request."}
             status, request = "running", None
+        elif name == "update_cancel_goal":
+            if not validate_goal(args, [m.content for m in state["messages"] if isinstance(m, HumanMessage)]):
+                result = {"ok": False, "code": "INVALID_ARGUMENT", "message": "Invalid cancellation goal; no business action allowed."}
+                message = ToolMessage(content=json.dumps(result), name=name, tool_call_id=call["id"], status="error")
+                persist(state, [message])
+                return {"messages": [message], "status": "failed", "failure_reason": "invalid_cancel_goal"}
+            targets = (goal_state.get("targets") if goal_state.get("scope") == args["scope"]
+                       and goal_state.get("order_ids") == args["order_ids"] else None)
+            goal_state.clear()
+            goal_state.update(args, targets=targets, needs_refresh=False)
+            persist_goal()
+            result = {"ok": True, "code": "GOAL_RECORDED", "data": args}
+            status, request = "running", None
         elif name == "ask_user":
             if (set(args) == {"fields", "question"} and isinstance(args["question"], str) and args["question"]
                     and isinstance(args["fields"], list) and args["fields"]
@@ -359,7 +413,11 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 result = {"ok": False, "code": "INVALID_ARGUMENT", "message": "ask_user needs fields and question."}
                 status, request = "running", None
         else:
-            if name in IDENTITY_TOOLS and valid_arguments(name, args) and not _identity_is_grounded(args, state["messages"]):
+            if (name == "cancel_pending_order" and goal_state is not None
+                    and (goal_state.get("needs_refresh") or goal_state.get("scope") == "none"
+                         or args.get("order_id") not in (goal_state.get("targets") or []))):
+                result = {"ok": False, "code": "POLICY_DENIED", "message": "Cancellation is outside the recorded goal. No proposal was created."}
+            elif name in IDENTITY_TOOLS and valid_arguments(name, args) and not _identity_is_grounded(args, state["messages"]):
                 result = {"ok": False, "code": "MISSING_USER_INFORMATION",
                           "message": "These identity values were not supplied by the customer. Call ask_user for identity; do not guess.",
                           "fields": ["identity"]}

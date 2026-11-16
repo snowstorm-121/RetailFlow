@@ -1,0 +1,206 @@
+from retailflow.cancel_goals import validate_goal, goal_progress
+
+
+def test_goal_rejects_empty_selected_and_fabricated_quote():
+    assert not validate_goal({'scope':'selected','order_ids':[], 'source_quote':'Return my order.'}, ['Return my order.'])
+    assert not validate_goal({'scope':'all_pending','order_ids':[], 'source_quote':'Cancel all.'}, ['Keep everything.'])
+    assert not validate_goal({'scope':'selected','order_ids':['#W2'], 'source_quote':'Cancel #W1.'}, ['Cancel #W1.'])
+
+
+def test_goal_keeps_withdrawal_and_selected_scope():
+    assert validate_goal({'scope':'none','order_ids':[], 'source_quote':'Keep everything.'}, ['Cancel all.', 'Keep everything.'])
+    assert validate_goal({'scope':'selected','order_ids':['#W1'], 'source_quote':'Only cancel #W1.'}, ['Cancel all.', 'Only cancel #W1.'])
+
+
+def test_progress_needs_inventory_and_commit_evidence():
+    goal={'scope':'all_pending','order_ids':[], 'targets':None}
+    business={'orders':{'#W1':{'user_id':'u','status':'pending'}, '#W2':{'user_id':'other','status':'pending'}}}
+    assert not goal_progress(goal,'u',business,None,set())['complete']
+    p=goal_progress(goal,'u',business,['#W1','#W2'],set())
+    assert p['remaining_order_ids']==['#W1']
+    business['orders']['#W1']['status']='cancelled'
+    assert not goal_progress(goal,'u',business,['#W1'],set())['complete']
+    assert goal_progress(goal,'u',business,['#W1'],{'#W1'})['complete']
+    assert goal['targets']==['#W1']
+
+
+def test_selected_foreign_order_does_not_leak_status_or_count_complete():
+    goal={'scope':'selected','order_ids':['#W2'],'targets':None}
+    p=goal_progress(goal,'u',{'orders':{'#W2':{'user_id':'other','status':'cancelled'}}},None,{'#W2'})
+    assert not p['complete']
+    assert p['orders']==[{'order_id':'#W2','status':'unavailable','committed':False}]
+
+
+def test_runtime_registers_persists_and_blocks_unfinished_goal(tmp_path):
+    import asyncio
+    from langchain_core.messages import AIMessage
+    from test_agent_loop import runtime, call
+    opening='Yara Muller, 85041. Cancel all of my pending orders.'
+    worker, model, config=runtime(tmp_path,[
+        call('update_cancel_goal',{'scope':'all_pending','order_ids':[],'source_quote':opening},'goal'),
+        call('find_user_id_by_name_zip',{'first_name':'Yara','last_name':'Muller','zip':'85041'},'id'),
+        call('get_user_details',{'user_id':'yara_muller_8652'},'profile'),
+        AIMessage(content='All orders cancelled.'), AIMessage(content='All done.'),
+    ], cancel_goal_tracking=True, isolated_proposal_repair=True)
+    result=asyncio.run(worker.run_turn('a',{'kind':'message','text':opening},config))
+    assert result['status']=='failed'
+    assert result['failure_reason']=='cancel_goal_incomplete'
+    goal=worker._load_runtime('a')['cancel_goal']
+    assert set(goal['targets'])=={'#W5056519','#W5995614'}
+    assert not goal['needs_refresh']
+    assert worker.environment.get_order('a','#W5056519')['status']=='pending'
+    assert 'cancel_goal' in model.inputs[-1][1].content
+
+
+def test_invalid_native_plan_stops_before_business(tmp_path):
+    import asyncio
+    from test_agent_loop import runtime, call
+    worker,model,config=runtime(tmp_path,[call('update_cancel_goal',{'scope':'selected','order_ids':[],'source_quote':'Return everything.'},'bad')],cancel_goal_tracking=True)
+    result=asyncio.run(worker.run_turn('a',{'kind':'message','text':'Return everything.'},config))
+    assert result['status']=='failed'
+    assert result['failure_reason']=='invalid_cancel_goal'
+    assert len(model.inputs)==1
+
+
+def test_planning_tool_accounting_requires_valid_grounded_plan():
+    from langchain_core.messages import HumanMessage
+    from retailflow.evaluation import _tool_stats
+    from test_agent_loop import call
+    text='Cancel all my pending orders.'
+    messages=[HumanMessage(content=text),call('update_cancel_goal',{'scope':'all_pending','order_ids':[],'source_quote':text},'g')]
+    assert _tool_stats(messages)[0]['legal_tool_requests']==1
+    messages[-1]=call('update_cancel_goal',{'scope':'selected','order_ids':[],'source_quote':text},'bad')
+    assert _tool_stats(messages)[0]['legal_tool_requests']==0
+
+
+def test_goal_survives_restart_and_requires_each_confirmation(tmp_path):
+    import asyncio
+    from langchain_core.messages import AIMessage
+    from retailflow.runtime import RetailRuntime
+    from test_agent_loop import runtime, call
+    text='Yara Muller, 85041. Cancel all my pending orders; ordered by mistake.'
+    worker,model,config=runtime(tmp_path,[
+        call('update_cancel_goal',{'scope':'all_pending','order_ids':[],'source_quote':text},'goal'),
+        call('find_user_id_by_name_zip',{'first_name':'Yara','last_name':'Muller','zip':'85041'},'id'),
+        call('get_user_details',{'user_id':'yara_muller_8652'},'profile'),
+        call('get_order_details',{'order_id':'#W5056519'},'o1'),
+        call('cancel_pending_order',{'order_id':'#W5056519','reason':'ordered by mistake'},'c1'),
+        AIMessage(content='All cancelled.'),
+        call('get_order_details',{'order_id':'#W5995614'},'o2'),
+        call('cancel_pending_order',{'order_id':'#W5995614','reason':'ordered by mistake'},'c2'),
+        AIMessage(content='Both orders cancelled.'),
+    ],cancel_goal_tracking=True,isolated_proposal_repair=True)
+    first=asyncio.run(worker.run_turn('a',{'kind':'message','text':text},config))
+    assert first['status']=='needs_confirmation'
+    worker=RetailRuntime(tmp_path/'business.sqlite',tmp_path/'traces',model_factory=lambda _:model)
+    second=asyncio.run(worker.run_turn('a',{'kind':'confirmation','accepted':True,'proposal_id':first['request']['proposal_id']},config))
+    assert second['status']=='needs_confirmation'
+    assert second['request']['args']['order_id']=='#W5995614'
+    assert worker.environment.get_order('a','#W5056519')['status']=='cancelled'
+    assert worker.environment.get_order('a','#W5995614')['status']=='pending'
+    final=asyncio.run(worker.run_turn('a',{'kind':'confirmation','accepted':True,'proposal_id':second['request']['proposal_id']},config))
+    assert final['status']=='answered'
+    assert worker.environment.get_order('a','#W5995614')['status']=='cancelled'
+
+
+def test_customer_withdrawal_invalidates_goal_and_old_proposal(tmp_path):
+    import asyncio
+    from langchain_core.messages import AIMessage
+    from test_agent_loop import runtime, call
+    text='Yara Muller, 85041. Cancel #W5056519; ordered by mistake.'
+    correction='Actually, keep all my orders. Do not cancel anything.'
+    worker,_,config=runtime(tmp_path,[
+        call('update_cancel_goal',{'scope':'selected','order_ids':['#W5056519'],'source_quote':text},'goal'),
+        call('find_user_id_by_name_zip',{'first_name':'Yara','last_name':'Muller','zip':'85041'},'id'),
+        call('get_order_details',{'order_id':'#W5056519'},'o'),
+        call('cancel_pending_order',{'order_id':'#W5056519','reason':'ordered by mistake'},'c'),
+        call('update_cancel_goal',{'scope':'none','order_ids':[],'source_quote':correction},'withdraw'),
+        AIMessage(content='I will keep your orders.'),
+    ],cancel_goal_tracking=True)
+    proposal=asyncio.run(worker.run_turn('a',{'kind':'message','text':text},config))
+    result=asyncio.run(worker.run_turn('a',{'kind':'message','text':correction},config))
+    assert result['status']=='answered'
+    assert worker._load_runtime('a')['cancel_goal']['scope']=='none'
+    stale=asyncio.run(worker.run_turn('a',{'kind':'confirmation','accepted':True,'proposal_id':proposal['request']['proposal_id']},config))
+    assert stale['status']=='failed'
+    assert worker.environment.get_order('a','#W5056519')['status']=='pending'
+
+
+def test_none_goal_rejects_model_cancel_proposal(tmp_path):
+    import asyncio
+    from test_agent_loop import runtime, call
+    text='Yara Muller, 85041. Keep all orders; do not cancel anything.'
+    worker,_,config=runtime(tmp_path,[
+        call('update_cancel_goal',{'scope':'none','order_ids':[],'source_quote':text},'goal'),
+        call('find_user_id_by_name_zip',{'first_name':'Yara','last_name':'Muller','zip':'85041'},'id'),
+        call('get_order_details',{'order_id':'#W5056519'},'o'),
+        call('cancel_pending_order',{'order_id':'#W5056519','reason':'ordered by mistake'},'bad'),
+    ],cancel_goal_tracking=True)
+    result=asyncio.run(worker.run_turn('a',{'kind':'message','text':text},config))
+    assert result['status']=='refused'
+    assert worker.environment.pending_proposal('a') is None
+
+
+def test_selected_goal_requires_exact_order_id_in_quote():
+    assert not validate_goal({'scope':'selected','order_ids':['#W1'],'source_quote':'Cancel #W12.'}, ['Cancel #W12.'])
+
+
+def test_goal_cannot_finish_before_identity_or_inventory(tmp_path):
+    import asyncio
+    from langchain_core.messages import AIMessage
+    from test_agent_loop import runtime, call
+    text='Cancel all my pending orders.'
+    worker,_,config=runtime(tmp_path,[
+        call('update_cancel_goal',{'scope':'all_pending','order_ids':[],'source_quote':text},'goal'),
+        AIMessage(content='All done.'), AIMessage(content='All done.'),
+    ],cancel_goal_tracking=True,isolated_proposal_repair=True)
+    result=asyncio.run(worker.run_turn('a',{'kind':'message','text':text},config))
+    assert result['status']=='failed'
+    assert result['failure_reason']=='cancel_goal_incomplete'
+
+
+def test_incomplete_goal_still_allows_missing_reason_question(tmp_path):
+    import asyncio
+    from langchain_core.messages import AIMessage
+    from test_agent_loop import runtime, call
+    text='Yara Muller, 85041. Cancel all my pending orders.'
+    worker,model,config=runtime(tmp_path,[
+        call('update_cancel_goal',{'scope':'all_pending','order_ids':[],'source_quote':text},'goal'),
+        call('find_user_id_by_name_zip',{'first_name':'Yara','last_name':'Muller','zip':'85041'},'id'),
+        call('get_user_details',{'user_id':'yara_muller_8652'},'profile'),
+        AIMessage(content='Please provide the cancellation reason.'),
+        call('ask_user',{'fields':['cancel_reason'],'question':'What is the cancellation reason?'},'ask'),
+    ],cancel_goal_tracking=True,isolated_information_repair=True,isolated_proposal_repair=True)
+    result=asyncio.run(worker.run_turn('a',{'kind':'message','text':text},config))
+    assert result['status']=='needs_input'
+    assert result['request']['fields']==['cancel_reason']
+    assert worker.environment.pending_proposal('a') is None
+    assert [t['function']['name'] for t in model.bound_tools]==['ask_user']
+
+
+def test_unchanged_goal_refresh_preserves_frozen_unproven_targets(tmp_path):
+    import asyncio,json
+    from langchain_core.messages import AIMessage
+    from test_agent_loop import runtime,call
+    text='Yara Muller, 85041. Cancel all my pending orders.'
+    goal={'scope':'all_pending','order_ids':[],'source_quote':text}
+    worker,_,config=runtime(tmp_path,[
+        call('update_cancel_goal',goal,'g1'),
+        call('find_user_id_by_name_zip',{'first_name':'Yara','last_name':'Muller','zip':'85041'},'id'),
+        call('get_user_details',{'user_id':'yara_muller_8652'},'profile'),
+        call('ask_user',{'fields':['cancel_reason'],'question':'Reason?'},'ask'),
+        call('update_cancel_goal',goal,'g2'),
+        AIMessage(content='All done.'),AIMessage(content='All done.'),
+    ],cancel_goal_tracking=True,isolated_proposal_repair=True)
+    first=asyncio.run(worker.run_turn('a',{'kind':'message','text':text},config))
+    assert first['status']=='needs_input'
+    targets=worker._load_runtime('a')['cancel_goal']['targets']
+    # Deliberately corrupt only this test database: changed status is not a receipt.
+    with worker.environment.storage.transaction() as db:
+        business=json.loads(db.execute('SELECT business_json FROM sessions WHERE thread=?',('a',)).fetchone()[0])
+        for ident in targets:business['orders'][ident]['status']='cancelled'
+        db.execute('UPDATE sessions SET business_json=? WHERE thread=?',(json.dumps(business),'a'))
+    result=asyncio.run(worker.run_turn('a',{'kind':'message','text':'Ordered by mistake.'},config))
+    assert worker._load_runtime('a')['cancel_goal']['targets']==targets
+    assert result['status']=='failed'
+    assert result['failure_reason']=='cancel_goal_incomplete'

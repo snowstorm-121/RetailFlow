@@ -160,6 +160,12 @@ class RetailRuntime:
 
         if status is None:
             self._save_messages(thread_id, messages)
+            goal_state = None
+            if config.get("cancel_goal_tracking", False):
+                goal_state = metadata.setdefault("cancel_goal", {"needs_refresh": True})
+                if user_event["kind"] == "message":
+                    goal_state["needs_refresh"] = True
+                self._save_runtime(thread_id, metadata)
 
             def before_model():
                 if time.time() >= deadline:
@@ -176,7 +182,8 @@ class RetailRuntime:
                                       int(config.get("max_model_calls_per_turn", 12)),
                                       {**config, "receipt_answer_review": bool(config.get("receipt_answer_review") and confirmed_outcome)},
                                       persist_messages=lambda current: self._save_messages(thread_id, current),
-                                      before_model=before_model)
+                                      before_model=before_model, goal_state=goal_state,
+                                      persist_goal=lambda: self._save_runtime(thread_id, metadata))
             try:
                 state = await asyncio.wait_for(graph.ainvoke({"messages": messages, "status": "running", "request": None,
                                              "model_calls": 0, "failure_reason": None},

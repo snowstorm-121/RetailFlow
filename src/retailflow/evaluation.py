@@ -16,7 +16,8 @@ from copy import deepcopy
 from pathlib import Path
 
 import httpx
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from retailflow.cancel_goals import validate_goal
 
 from retailflow.dataset import ROOT, check_final_state, validate_dataset
 from retailflow.environment import RetailEnvironment
@@ -142,8 +143,11 @@ def _tool_stats(messages):
     user_id = None
     exposures = []
     handoffs = []
+    customer_messages = []
     for message in messages:
-        if isinstance(message, AIMessage):
+        if isinstance(message, HumanMessage):
+            customer_messages.append(message.content)
+        elif isinstance(message, AIMessage):
             total += len(message.tool_calls) + len(message.invalid_tool_calls)
             for call in message.tool_calls:
                 name, args = call["name"], call["args"]
@@ -158,6 +162,8 @@ def _tool_stats(messages):
                                  and bool(args["question"]) and bool(args["fields"])
                                  and all(f in {"identity", "order", "cancel_reason", "return_items", "refund_method"} for f in args["fields"])
                                  and len(set(args["fields"])) == len(args["fields"]))
+                elif name == "update_cancel_goal":
+                    legal += int(validate_goal(args, customer_messages))
         elif isinstance(message, ToolMessage):
             result = json.loads(message.content)
             blocked += result.get("code") in {"AUTH_REQUIRED", "POLICY_DENIED", "INVALID_ARGUMENT", "UNKNOWN_TOOL", "PROTOCOL_ERROR", "MISSING_USER_INFORMATION"}

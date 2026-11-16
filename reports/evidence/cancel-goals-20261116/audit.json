@@ -1,0 +1,139 @@
+[
+  {
+    "condition": "baseline",
+    "state_hash_verified": true,
+    "changed_orders": {},
+    "goal": null,
+    "receipt_count": 0,
+    "success": false,
+    "failure_reason": "information_request_not_structured"
+  },
+  {
+    "condition": "goals",
+    "state_hash_verified": true,
+    "changed_orders": {},
+    "goal": {
+      "source_quote": "I want to cancel all of my pending orders.",
+      "scope": "all_pending",
+      "order_ids": [],
+      "targets": [
+        "#W5056519",
+        "#W5995614"
+      ],
+      "needs_refresh": false
+    },
+    "receipt_count": 0,
+    "success": false,
+    "failure_reason": "cancel_goal_incomplete"
+  },
+  {
+    "condition": "goals-final",
+    "state_hash_verified": true,
+    "changed_orders": {
+      "#W5056519": {
+        "address": {
+          "address1": "575 Oak Street",
+          "address2": "Suite 866",
+          "city": "Phoenix",
+          "country": "USA",
+          "state": "AZ",
+          "zip": "85041"
+        },
+        "cancel_reason": "ordered by mistake",
+        "fulfillments": [],
+        "items": [
+          {
+            "item_id": "7902309762",
+            "name": "Makeup Kit",
+            "options": {
+              "brand": "Brand B",
+              "kit size": "professional",
+              "skin tone": "light"
+            },
+            "price": 243.62,
+            "product_id": "5149340237"
+          }
+        ],
+        "order_id": "#W5056519",
+        "payment_history": [
+          {
+            "amount": 243.62,
+            "payment_method_id": "credit_card_3095586",
+            "transaction_type": "payment"
+          },
+          {
+            "amount": 243.62,
+            "payment_method_id": "credit_card_3095586",
+            "transaction_type": "refund"
+          }
+        ],
+        "status": "cancelled",
+        "user_id": "yara_muller_8652"
+      },
+      "#W5995614": {
+        "address": {
+          "address1": "575 Oak Street",
+          "address2": "Suite 866",
+          "city": "Phoenix",
+          "country": "USA",
+          "state": "AZ",
+          "zip": "85041"
+        },
+        "cancel_reason": "ordered by mistake",
+        "fulfillments": [],
+        "items": [
+          {
+            "item_id": "3877338112",
+            "name": "Dumbbell Set",
+            "options": {
+              "material": "iron",
+              "set type": "adjustable",
+              "weight range": "5-25 lbs"
+            },
+            "price": 545.68,
+            "product_id": "7233192239"
+          },
+          {
+            "item_id": "9692325258",
+            "name": "Luggage Set",
+            "options": {
+              "color": "black",
+              "material": "softshell",
+              "piece count": "3-piece"
+            },
+            "price": 528.63,
+            "product_id": "5426915165"
+          }
+        ],
+        "order_id": "#W5995614",
+        "payment_history": [
+          {
+            "amount": 1074.31,
+            "payment_method_id": "credit_card_3095586",
+            "transaction_type": "payment"
+          },
+          {
+            "amount": 1074.31,
+            "payment_method_id": "credit_card_3095586",
+            "transaction_type": "refund"
+          }
+        ],
+        "status": "cancelled",
+        "user_id": "yara_muller_8652"
+      }
+    },
+    "goal": {
+      "source_quote": "I want to cancel all of my pending orders.",
+      "scope": "all_pending",
+      "order_ids": [],
+      "targets": [
+        "#W5056519",
+        "#W5995614"
+      ],
+      "needs_refresh": false
+    },
+    "receipt_count": 2,
+    "success": true,
+    "failure_reason": null
+  }
+]
