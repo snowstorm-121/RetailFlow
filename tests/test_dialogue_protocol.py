@@ -187,22 +187,26 @@ def test_information_retry_is_focused_without_replaying_failed_answer_as_assista
     assert result['usage']['context_inputs'][2]['messages'] == messages_to_dict(retry)
 
 
-def test_information_retry_cannot_finish_with_unrelated_plain_text(tmp_path):
+@pytest.mark.parametrize("isolated", [False, True])
+def test_information_retry_cannot_finish_with_unrelated_plain_text(tmp_path, isolated):
     worker, _, config = runtime(tmp_path, [
         AIMessage(content='Please provide your email.'), AIMessage(content='Thanks, I can help.'),
     ])
+    config['isolated_information_repair'] = isolated
     result = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text': 'Cancel my purchase.'}, config))
     assert result['status'] == 'failed'
     assert result['failure_reason'] == 'information_request_not_structured'
 
 
-def test_information_retry_rechecks_the_quoted_request_budget(tmp_path):
+@pytest.mark.parametrize("isolated", [False, True])
+def test_information_retry_rechecks_the_quoted_request_budget(tmp_path, isolated):
     worker, _, config = runtime(tmp_path, [
         call('find_user_id_by_name_zip', {'first_name': 'Yara', 'last_name': 'Muller', 'zip': '85041'}, 'identity'),
         AIMessage(content='Please provide your payment method. ' + 'Details. ' * 1000),
         call('ask_user', {'fields': ['refund_method'], 'question': 'Your refund method?'}, 'should-not-run'),
     ])
     config['context_budget_tokens'] = 500
+    config['isolated_information_repair'] = isolated
     result = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text': 'Yara Muller 85041. Return an item.'}, config))
     assert result['status'] == 'budget_exceeded'
     assert result['failure_reason'] == 'context_budget'
@@ -393,3 +397,35 @@ def test_return_receipt_response_uses_committed_items_and_policy(tmp_path):
     assert result['usage']['model_calls'] == 1
     assert '5 days' in result['usage']['original_model_answer']
     assert worker.load_messages('a')[-1].content == result['text']
+
+
+def test_isolated_information_repair_before_identity_has_no_examples(tmp_path):
+    worker, model, config = runtime(tmp_path, [
+        AIMessage(content='Please provide your email or full name and ZIP.'),
+        call('ask_user', {'fields': ['identity'], 'question': 'Your email or full name and ZIP?'}, 'native'),
+    ])
+    config['isolated_information_repair'] = True
+    result = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text': 'Return my purchase.'}, config))
+    retry = model.inputs[1]
+    assert result['status'] == 'needs_input'
+    assert len(retry) == 2
+    assert retry[1].additional_kwargs.get('protocol_retry_input')
+    assert not any(m.additional_kwargs.get('protocol_example') for m in retry)
+    assert result['usage']['model_calls'] == 2
+    assert worker.environment.pending_proposal('a') is None
+
+
+def test_repeated_successfully_created_claim_without_proposal_fails(tmp_path):
+    worker, _, config = runtime(tmp_path, [
+        call('find_user_id_by_name_zip', {'first_name': 'Yusuf', 'last_name': 'Rossi', 'zip': '19122'}, 'identity'),
+        call('get_order_details', {'order_id': '#W2378156'}, 'order'),
+        AIMessage(content='A return request has been created.'),
+        AIMessage(content='A return request has been successfully created for your order.'),
+    ])
+    result = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text':
+        'Yusuf Rossi, 19122. Return the headphones in #W2378156.'}, config))
+    assert result['status'] == 'failed'
+    assert result['failure_reason'] == 'proposal_not_created'
+    assert result['usage']['dialogue_repairs'] == 1
+    assert worker.environment.pending_proposal('a') is None
+    assert worker.environment.get_order('a', '#W2378156')['status'] == 'delivered'

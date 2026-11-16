@@ -192,7 +192,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         if information_repair or missing_identity:
             offered = [RETAIL_TOOLS[-1]]
         model = model_factory(runtime.context).bind_tools(offered)
-        if information_repair and session.get("user_id"):
+        isolated_repair = config.get("isolated_information_repair", False)
+        if information_repair and (session.get("user_id") or isolated_repair):
             # Retry only the failed information request. Replaying it as the latest
             # assistant answer encourages the small model to repeat prose.
             question = state["messages"][-2].content
@@ -201,6 +202,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                       "and do not output plain text.")
             visible = [HumanMessage(content=json.dumps({"customer_information_request": question}),
                                     additional_kwargs={"protocol_retry_input": True})]
+            if isolated_repair:
+                examples = []
             model_messages = [SystemMessage(content=prompt, additional_kwargs={"protocol_feedback": "information"}),
                               *examples, *visible]
         else:
@@ -271,7 +274,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             text = response.content
             proposal_missing = (isinstance(text, str) and session.get("user_id")
                                 and session.get("target_order_status") in {"pending", "delivered"}
-                                and re.search(r"please confirm|(?:could|can|would) you confirm|do you (?:confirm|want)|would you like me to (?:proceed|cancel|return)|\b(?:proposal|return request|cancellation request)(?: (?:has been |was )?| for [^.!?\n]+? (?:has been |was ))(?:created|submitted)\b", text, re.I)
+                                and re.search(r"please confirm|(?:could|can|would) you confirm|do you (?:confirm|want)|would you like me to (?:proceed|cancel|return)|\b(?:proposal|return request|cancellation request)(?: (?:has been |was )?| for [^.!?\n]+? (?:has been |was ))(?:successfully )?(?:created|submitted)\b", text, re.I)
                                 and re.search(r"cancel|return", text, re.I))
             explicit_confirmation = (isinstance(text, str) and re.search(
                 r"please confirm (?:if|whether) you (?:would like|want|wish)|would you like me to (?:proceed|cancel|return)|do you want me to",

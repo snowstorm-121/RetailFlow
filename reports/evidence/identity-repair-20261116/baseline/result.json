@@ -1,0 +1,71 @@
+{
+  "task_id": "tau-retail-73",
+  "category": "legal_write",
+  "status": "failed",
+  "requires_write": true,
+  "success": false,
+  "objective_passed": false,
+  "state_passed": false,
+  "state_failures": [
+    "missing_confirmation",
+    "target_state_mismatch"
+  ],
+  "policy_passed": true,
+  "policy_failures": [],
+  "required_info_literal_match": true,
+  "review_required": false,
+  "communication_review": null,
+  "model_tool_requests": 0,
+  "legal_tool_requests": 0,
+  "blocked_requests": 0,
+  "variant": "B2",
+  "thread_id": "B2-tau-retail-73-4d0e9d4c",
+  "failure_reason": "information_request_not_structured",
+  "failure_category": "budget_environment",
+  "fault_registered": false,
+  "fault_triggered": 0,
+  "usage": {
+    "model_calls": 2,
+    "tool_calls": 0,
+    "retries": 0,
+    "dialogue_repairs": 1,
+    "input_tokens": 2446,
+    "output_tokens": 48
+  },
+  "elapsed_seconds": 9.01,
+  "memory": {
+    "python_peak_rss_bytes": 123600896,
+    "ollama_observed_rss_bytes": 221577216,
+    "ollama_reported_loaded_model_bytes": 4119016480
+  },
+  "trace_paths": [
+    "artifacts/identity-repair-20261116/baseline/traces/20261115T160757Z-7815d09a.json"
+  ],
+  "events": [
+    {
+      "type": "user_event",
+      "kind": "message",
+      "text": "Please return everything I just bought except the coffee machine."
+    }
+  ],
+  "first_observed_error": null,
+  "state_hash_before": "f08162ba14d2d3ce9ebe4ebc0fa3cd4bdc2876eaaf9d3411802cdba96ea1f41a",
+  "state_hash_after": "f08162ba14d2d3ce9ebe4ebc0fa3cd4bdc2876eaaf9d3411802cdba96ea1f41a",
+  "expected_checks": {
+    "communicate_info": [],
+    "orders": [
+      {
+        "order_id": "#W5272531",
+        "return_items": [
+          "2698416822",
+          "3320557165",
+          "7228247242",
+          "8098621301"
+        ],
+        "return_payment_method_id": "credit_card_6824399",
+        "status": "return requested"
+      }
+    ],
+    "transfer_to_human": false
+  }
+}

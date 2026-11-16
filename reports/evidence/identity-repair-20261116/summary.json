@@ -1,0 +1,77 @@
+{
+  "date": "2026-11-16",
+  "scope": "Paired seen Dev73 diagnostic, not full Dev or Test",
+  "langfuse_enabled": false,
+  "conditions": {
+    "baseline": {
+      "task_id": "tau-retail-73",
+      "status": "failed",
+      "failure_reason": "information_request_not_structured",
+      "objective_passed": false,
+      "state_passed": false,
+      "state_failures": [
+        "missing_confirmation",
+        "target_state_mismatch"
+      ],
+      "policy_passed": true,
+      "policy_failures": [],
+      "usage": {
+        "model_calls": 2,
+        "tool_calls": 0,
+        "retries": 0,
+        "dialogue_repairs": 1,
+        "input_tokens": 2446,
+        "output_tokens": 48
+      },
+      "state_hash_verified": true,
+      "business_unchanged": true,
+      "trace_index": [
+        {
+          "source": "artifacts/identity-repair-20261116/baseline/traces/20261115T160757Z-7815d09a.json",
+          "evidence": "reports/evidence/identity-repair-20261116/baseline/traces/20261115T160757Z-7815d09a.json",
+          "sha256": "8cd91c8399ceaca487837023c9b1fd0a5c18c66ac2bd9afbb62bd2c8e92d2c43"
+        }
+      ]
+    },
+    "isolated": {
+      "task_id": "tau-retail-73",
+      "status": "answered",
+      "failure_reason": "missing_confirmation",
+      "objective_passed": false,
+      "state_passed": false,
+      "state_failures": [
+        "missing_confirmation",
+        "target_state_mismatch"
+      ],
+      "policy_passed": true,
+      "policy_failures": [],
+      "usage": {
+        "model_calls": 9,
+        "tool_calls": 5,
+        "retries": 0,
+        "dialogue_repairs": 3,
+        "input_tokens": 15149,
+        "output_tokens": 583
+      },
+      "state_hash_verified": true,
+      "business_unchanged": true,
+      "trace_index": [
+        {
+          "source": "artifacts/identity-repair-20261116/isolated/traces/20261115T160804Z-5c45b874.json",
+          "evidence": "reports/evidence/identity-repair-20261116/isolated/traces/20261115T160804Z-5c45b874.json",
+          "sha256": "af9b33571278ee72ba9ce96276db5f3319120ad19ea490d44b772cafc303b055"
+        },
+        {
+          "source": "artifacts/identity-repair-20261116/isolated/traces/20261115T160837Z-4483c334.json",
+          "evidence": "reports/evidence/identity-repair-20261116/isolated/traces/20261115T160837Z-4483c334.json",
+          "sha256": "2b6ba92f7e481985f03d55fc7a155685a9ecc5b424356f7f91bfe4246a8631d5"
+        },
+        {
+          "source": "artifacts/identity-repair-20261116/isolated/traces/20261115T160858Z-8564ed8a.json",
+          "evidence": "reports/evidence/identity-repair-20261116/isolated/traces/20261115T160858Z-8564ed8a.json",
+          "sha256": "9cef67b4f4cdb4ac61cfe5d33679abf9798c6cd1dec35f0404e4744fbba520b7"
+        }
+      ]
+    }
+  }
+}
