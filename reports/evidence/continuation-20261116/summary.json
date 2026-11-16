@@ -1,0 +1,82 @@
+{
+  "scope": "Seen Dev failure diagnostics only; no full evaluation or business write",
+  "cases": {
+    "read-chain-0-parsed": {
+      "tool_calls": [
+        {
+          "name": "get_user_details",
+          "args": {
+            "user_id": "yara_muller_8652"
+          },
+          "id": "409b98e6-4e0b-4cb5-a09e-bfe838855f84",
+          "type": "tool_call"
+        }
+      ],
+      "content": "",
+      "sha256": "98dc0d11cfe851f1319a9691278aee203a8469f97a49860be830c17b139b61fb"
+    },
+    "read-chain-1-parsed": {
+      "tool_calls": [
+        {
+          "name": "get_order_details",
+          "args": {
+            "order_id": "#W5995614"
+          },
+          "id": "6ecf29c0-eab0-4190-aedc-ac6661aad171",
+          "type": "tool_call"
+        }
+      ],
+      "content": "",
+      "sha256": "faa980719a3cf87522a3aee97c366f7aa8ee2f34f0183ad802bc522beeff4320"
+    },
+    "read-chain-2-parsed": {
+      "tool_calls": [],
+      "content": "{\n  \"action\": \"cancel_pending_order\",\n  \"order_id\": \"#W5995614\",\n  \"reason\": \"ordered by mistake\",\n  \"refunds\": [\n    {\n      \"transaction_type\": \"refund\",\n      \"amount\": 1074.31,\n      \"payment_method_id\": \"credit_card_3095586\",\n      \"timing\": \"5 to 7 business days\"\n    }\n  ]\n}",
+      "sha256": "de77bcaf3b1d046806368ccbd73d4e7e6e80ea7facfec364e612bfb3fa901dc0"
+    },
+    "snapshot-identity-parsed": {
+      "tool_calls": [
+        {
+          "name": "find_user_id_by_name_zip",
+          "args": {
+            "first_name": "Yara",
+            "last_name": "Muller",
+            "zip": "85041"
+          },
+          "id": "2728eb70-2f43-4eb2-806b-955924b5839e",
+          "type": "tool_call"
+        }
+      ],
+      "content": "",
+      "sha256": "f862d31db72f79fa1050f47e566f4e8b9584119c4ca806d4565f820d578ebc3c"
+    },
+    "snapshot-parsed": {
+      "tool_calls": [
+        {
+          "name": "find_user_id_by_name_zip",
+          "args": {
+            "zip": "85041",
+            "first_name": "Yara",
+            "last_name": "Muller"
+          },
+          "id": "784784e8-175c-482b-b88b-0a101d5bb309",
+          "type": "tool_call"
+        }
+      ],
+      "content": "",
+      "sha256": "44b8c2d778ac28f5d32e9e561740231cf16bee822ba7cbf6881b67f332017ef1"
+    },
+    "tau-retail-113-parsed": {
+      "tool_calls": [],
+      "content": "I have successfully processed your request to cancel your pending orders.\n\nHere is the outcome:\n\n- **Order #W5056519** (Makeup Kit) was cancelled due to being \"ordered by mistake.\"  \n  - Refund of $243.62 will be processed to your credit card (ending in 6918) within 5 to 7 business days.\n\n- **Order #W5995614** (Dumbbell Set and Luggage Set) was also cancelled due to being \"ordered by mistake.\"  \n  - Refund of $1,074.31 will be processed to your credit card (ending in 6918) within 5 to 7 business days.\n\nBoth orders are now cancelled, and the refunds will be applied as per the policy.\n\nIf you need any further assistance, feel free to ask!",
+      "sha256": "42819aea736dec23022d2a2660ee438375682147616924e9ee20cd16322e55a3"
+    },
+    "tau-retail-2-parsed": {
+      "tool_calls": [],
+      "content": "The number of T-shirt options available is not explicitly listed in the provided data. However, in the order details, two T-shirts are listed with different options:\n\n1. **Black, XXL, Cotton, Crew Neck**\n2. **Blue, S, Cotton, V-Neck**\n\nThese are the only T-shirt options available in the user's order history.\n\nRegarding the return request:\n- The vacuum cleaner, headphones, and smart watch have been successfully requested for return.\n- The return proposal has been confirmed.\n- The refund will be processed to the original payment method (credit card ending in 2478).\n- The status of the order #W2378156 is now \"return requested.\"\n- A return instruction email is expected per policy, though no real email is sent in this environment.\n- No further returns or amendments are allowed for this order.\n\nAll requested actions have been completed.",
+      "sha256": "d21b5ee8e630ab577881edc270ccc0dc3b7ed0d7a67fdb7c8cbc3f301d109b3f"
+    }
+  },
+  "business_unchanged": true,
+  "text_action_executed": false
+}

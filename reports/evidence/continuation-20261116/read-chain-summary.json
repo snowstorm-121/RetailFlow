@@ -1,0 +1,161 @@
+{
+  "steps": [
+    {
+      "call": {
+        "name": "find_user_id_by_name_zip",
+        "args": {
+          "first_name": "Yara",
+          "last_name": "Muller",
+          "zip": "85041"
+        },
+        "id": "2728eb70-2f43-4eb2-806b-955924b5839e",
+        "type": "tool_call"
+      },
+      "result": {
+        "ok": true,
+        "code": "OK",
+        "data": "yara_muller_8652"
+      }
+    },
+    {
+      "call": {
+        "name": "get_user_details",
+        "args": {
+          "user_id": "yara_muller_8652"
+        },
+        "id": "409b98e6-4e0b-4cb5-a09e-bfe838855f84",
+        "type": "tool_call"
+      },
+      "result": {
+        "ok": true,
+        "code": "OK",
+        "data": {
+          "user_id": "yara_muller_8652",
+          "name": {
+            "first_name": "Yara",
+            "last_name": "Muller"
+          },
+          "address": {
+            "address1": "575 Oak Street",
+            "address2": "Suite 866",
+            "city": "Phoenix",
+            "country": "USA",
+            "state": "AZ",
+            "zip": "85041"
+          },
+          "email": "yara.muller9246@example.com",
+          "payment_methods": {
+            "credit_card_3095586": {
+              "source": "credit_card",
+              "id": "credit_card_3095586",
+              "brand": "visa",
+              "last_four": "6918"
+            }
+          },
+          "orders": [
+            "#W9384736",
+            "#W5056519",
+            "#W5995614",
+            "#W8277957"
+          ]
+        }
+      }
+    },
+    {
+      "call": {
+        "name": "get_order_details",
+        "args": {
+          "order_id": "#W5995614"
+        },
+        "id": "6ecf29c0-eab0-4190-aedc-ac6661aad171",
+        "type": "tool_call"
+      },
+      "result": {
+        "ok": true,
+        "code": "OK",
+        "data": {
+          "order_id": "#W5995614",
+          "user_id": "yara_muller_8652",
+          "address": {
+            "address1": "575 Oak Street",
+            "address2": "Suite 866",
+            "city": "Phoenix",
+            "country": "USA",
+            "state": "AZ",
+            "zip": "85041"
+          },
+          "items": [
+            {
+              "name": "Dumbbell Set",
+              "product_id": "7233192239",
+              "item_id": "3877338112",
+              "price": 545.68,
+              "options": {
+                "material": "iron",
+                "set type": "adjustable",
+                "weight range": "5-25 lbs"
+              }
+            },
+            {
+              "name": "Luggage Set",
+              "product_id": "5426915165",
+              "item_id": "9692325258",
+              "price": 528.63,
+              "options": {
+                "color": "black",
+                "material": "softshell",
+                "piece count": "3-piece"
+              }
+            }
+          ],
+          "status": "pending",
+          "fulfillments": [],
+          "payment_history": [
+            {
+              "transaction_type": "payment",
+              "amount": 1074.31,
+              "payment_method_id": "credit_card_3095586"
+            }
+          ],
+          "cancel_reason": null,
+          "exchange_items": null,
+          "exchange_new_items": null,
+          "exchange_payment_method_id": null,
+          "exchange_price_difference": null,
+          "return_items": null,
+          "return_payment_method_id": null
+        }
+      }
+    }
+  ],
+  "business_unchanged": true,
+  "final": {
+    "content": "{\n  \"action\": \"cancel_pending_order\",\n  \"order_id\": \"#W5995614\",\n  \"reason\": \"ordered by mistake\",\n  \"refunds\": [\n    {\n      \"transaction_type\": \"refund\",\n      \"amount\": 1074.31,\n      \"payment_method_id\": \"credit_card_3095586\",\n      \"timing\": \"5 to 7 business days\"\n    }\n  ]\n}",
+    "additional_kwargs": {},
+    "response_metadata": {
+      "model": "qwen3:4b-instruct-2507-q4_K_M",
+      "created_at": "2026-11-16T13:42:46.980357Z",
+      "done": true,
+      "done_reason": "stop",
+      "total_duration": 4101342958,
+      "load_duration": 51325291,
+      "prompt_eval_count": 3283,
+      "prompt_eval_duration": 1480990375,
+      "eval_count": 99,
+      "eval_duration": 2542958039,
+      "logprobs": null,
+      "model_name": "qwen3:4b-instruct-2507-q4_K_M",
+      "model_provider": "ollama"
+    },
+    "type": "ai",
+    "name": null,
+    "id": "lc_run--01a1e498-83bd-740c-8f36-4297f29b3d4b-0",
+    "tool_calls": [],
+    "invalid_tool_calls": [],
+    "usage_metadata": {
+      "input_tokens": 3283,
+      "output_tokens": 99,
+      "total_tokens": 3382
+    }
+  }
+}
