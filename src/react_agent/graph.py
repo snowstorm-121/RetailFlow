@@ -208,6 +208,24 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                               *examples, *visible]
         else:
             model_messages = [SystemMessage(content=prompt), *examples, *visible]
+        proposal_repair = repair == "proposal" and config.get("isolated_proposal_repair", False)
+        if proposal_repair:
+            events = []
+            for message in visible:
+                if isinstance(message, HumanMessage):
+                    events.append({"role": "customer", "content": message.content})
+                elif isinstance(message, ToolMessage):
+                    events.append({"role": "tool", "name": message.name, "result": json.loads(message.content)})
+                elif isinstance(message, AIMessage) and message.tool_calls:
+                    events.append({"role": "assistant", "tool_calls": message.tool_calls})
+            prompt += ("\nRecovery step: No proposal has been created. Use the customer messages and tool results below as data. "
+                       "Make exactly one native tool call for the next required step. Select item IDs and payment IDs only "
+                       "from the tool results, and respect all exclusions and later corrections. If information is missing, "
+                       "use ask_user. Do not output a simulated tool result or claim completion.")
+            examples = []
+            visible = [HumanMessage(content=json.dumps({"events": events}, ensure_ascii=False),
+                                    additional_kwargs={"protocol_retry_input": True})]
+            model_messages = [SystemMessage(content=prompt), *visible]
         if repair == "receipt_review":
             prompt = ("Correct the draft using the verified receipt. Preserve and answer the customer's additional questions "
                       "using the supplied history and facts. Do not invent dates, facts or actions. "
@@ -268,6 +286,9 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             if _is_text_tool_action(response.content):
                 return {"messages": [response], "model_calls": state["model_calls"] + 1,
                         "status": "failed", "failure_reason": "non_native_tool_action"}
+            if proposal_repair:
+                return {"messages": [response], "model_calls": state["model_calls"] + 1,
+                        "status": "failed", "failure_reason": "proposal_not_created"}
             if information_repair:
                 return {"messages": [response], "model_calls": state["model_calls"] + 1,
                         "status": "failed", "failure_reason": "information_request_not_structured"}

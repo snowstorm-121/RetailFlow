@@ -1,0 +1,83 @@
+{
+  "task_id": "tau-retail-73",
+  "category": "legal_write",
+  "status": "failed",
+  "requires_write": true,
+  "success": false,
+  "objective_passed": false,
+  "state_passed": false,
+  "state_failures": [
+    "missing_confirmation",
+    "target_state_mismatch"
+  ],
+  "policy_passed": true,
+  "policy_failures": [],
+  "required_info_literal_match": true,
+  "review_required": false,
+  "communication_review": null,
+  "model_tool_requests": 5,
+  "legal_tool_requests": 5,
+  "blocked_requests": 0,
+  "variant": "B2",
+  "thread_id": "B2-tau-retail-73-7c27dc40",
+  "failure_reason": "proposal_not_created",
+  "failure_category": "budget_environment",
+  "fault_registered": false,
+  "fault_triggered": 0,
+  "usage": {
+    "model_calls": 9,
+    "tool_calls": 5,
+    "retries": 0,
+    "dialogue_repairs": 3,
+    "input_tokens": 15176,
+    "output_tokens": 613
+  },
+  "elapsed_seconds": 61.954,
+  "memory": {
+    "python_peak_rss_bytes": 123551744,
+    "ollama_observed_rss_bytes": 247300096,
+    "ollama_reported_loaded_model_bytes": 4119016480
+  },
+  "trace_paths": [
+    "artifacts/proposal-recovery-20261116/baseline/traces/20261116T075318Z-5841c6c6.json",
+    "artifacts/proposal-recovery-20261116/baseline/traces/20261116T075351Z-01fec2ef.json",
+    "artifacts/proposal-recovery-20261116/baseline/traces/20261116T075415Z-0271b8f9.json"
+  ],
+  "events": [
+    {
+      "type": "user_event",
+      "kind": "message",
+      "text": "Please return everything I just bought except the coffee machine."
+    },
+    {
+      "type": "user_event",
+      "kind": "message",
+      "text": "You name is Fatima Wilson and your email is fatima.wilson5721@example.com."
+    },
+    {
+      "type": "user_event",
+      "kind": "message",
+      "text": "The original payment method."
+    }
+  ],
+  "first_observed_error": null,
+  "state_hash_before": "f08162ba14d2d3ce9ebe4ebc0fa3cd4bdc2876eaaf9d3411802cdba96ea1f41a",
+  "state_hash_after": "f08162ba14d2d3ce9ebe4ebc0fa3cd4bdc2876eaaf9d3411802cdba96ea1f41a",
+  "expected_checks": {
+    "communicate_info": [],
+    "orders": [
+      {
+        "order_id": "#W5272531",
+        "return_items": [
+          "2698416822",
+          "3320557165",
+          "7228247242",
+          "8098621301"
+        ],
+        "return_payment_method_id": "credit_card_6824399",
+        "status": "return requested"
+      }
+    ],
+    "transfer_to_human": false
+  }
+}

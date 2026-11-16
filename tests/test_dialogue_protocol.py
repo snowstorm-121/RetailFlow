@@ -429,3 +429,78 @@ def test_repeated_successfully_created_claim_without_proposal_fails(tmp_path):
     assert result['usage']['dialogue_repairs'] == 1
     assert worker.environment.pending_proposal('a') is None
     assert worker.environment.get_order('a', '#W2378156')['status'] == 'delivered'
+
+
+def test_isolated_proposal_repair_preserves_ordered_facts_and_native_confirmation(tmp_path):
+    worker, model, config = runtime(tmp_path, [
+        call('find_user_id_by_name_zip', {'first_name': 'Yusuf', 'last_name': 'Rossi', 'zip': '19122'}, 'identity'),
+        call('get_order_details', {'order_id': '#W2378156'}, 'order'),
+        AIMessage(content='A return request has been created.'),
+        call('return_delivered_order_items', {'order_id': '#W2378156', 'item_ids': ['4202497723'],
+                                             'payment_method_id': 'credit_card_9513926'}, 'proposal'),
+    ])
+    config['isolated_proposal_repair'] = True
+    text = 'Yusuf Rossi, 19122. Return only the headphones in #W2378156 to my original payment method.'
+    result = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text': text}, config))
+    retry = model.inputs[-1]
+    assert len(retry) == 2
+    events = json.loads(retry[1].content)['events']
+    assert events[0] == {'role': 'customer', 'content': text}
+    assert [e['role'] for e in events] == ['customer', 'assistant', 'tool', 'assistant', 'tool']
+    assert events[-1]['result']['data']['order_id'] == '#W2378156'
+    assert 'A return request has been created.' not in retry[1].content
+    assert any(m.content == 'A return request has been created.' for m in worker.load_messages('a'))
+    assert result['status'] == 'needs_confirmation'
+    assert worker.environment.get_order('a', '#W2378156')['status'] == 'delivered'
+
+
+def test_isolated_proposal_repair_plain_text_cannot_finish_task(tmp_path):
+    worker, _, config = runtime(tmp_path, [
+        call('find_user_id_by_name_zip', {'first_name': 'Yusuf', 'last_name': 'Rossi', 'zip': '19122'}, 'identity'),
+        call('get_order_details', {'order_id': '#W2378156'}, 'order'),
+        AIMessage(content='A return request has been created.'),
+        AIMessage(content='All done.'),
+    ])
+    config['isolated_proposal_repair'] = True
+    result = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text':
+        'Yusuf Rossi, 19122. Return the headphones in #W2378156.'}, config))
+    assert result['status'] == 'failed'
+    assert result['failure_reason'] == 'proposal_not_created'
+    assert result['usage']['dialogue_repairs'] == 1
+    assert worker.environment.pending_proposal('a') is None
+
+
+def test_isolated_proposal_repair_keeps_later_customer_correction_last(tmp_path):
+    worker, model, config = runtime(tmp_path, [
+        call('find_user_id_by_name_zip', {'first_name': 'Yusuf', 'last_name': 'Rossi', 'zip': '19122'}, 'identity'),
+        call('get_order_details', {'order_id': '#W2378156'}, 'order'),
+        call('ask_user', {'fields': ['refund_method'], 'question': 'Which refund method?'}, 'ask'),
+        AIMessage(content='A return request has been created.'),
+        call('return_delivered_order_items', {'order_id': '#W2378156', 'item_ids': ['4202497723'],
+                                             'payment_method_id': 'credit_card_9513926'}, 'proposal'),
+    ])
+    config['isolated_proposal_repair'] = True
+    opening = 'Yusuf Rossi, 19122. Return everything in #W2378156.'
+    correction = 'Actually, only return the headphones. Use the original payment method.'
+    first = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text': opening}, config))
+    assert first['status'] == 'needs_input'
+    second = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text': correction}, config))
+    events = json.loads(model.inputs[-1][1].content)['events']
+    assert [e['content'] for e in events if e['role'] == 'customer'] == [opening, correction]
+    assert events[-1] == {'role': 'customer', 'content': correction}
+    assert events[-2]['name'] == 'ask_user'
+    assert second['status'] == 'needs_confirmation'
+
+
+def test_isolated_proposal_repair_does_not_extend_model_budget(tmp_path):
+    worker, model, config = runtime(tmp_path, [
+        call('find_user_id_by_name_zip', {'first_name': 'Yusuf', 'last_name': 'Rossi', 'zip': '19122'}, 'identity'),
+        call('get_order_details', {'order_id': '#W2378156'}, 'order'),
+        AIMessage(content='A return request has been created.'),
+    ], max_model_calls_per_turn=3)
+    config['isolated_proposal_repair'] = True
+    result = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text':
+        'Yusuf Rossi, 19122. Return the headphones in #W2378156.'}, config))
+    assert result['status'] == 'budget_exceeded'
+    assert len(model.inputs) == 3
+    assert worker.environment.pending_proposal('a') is None
