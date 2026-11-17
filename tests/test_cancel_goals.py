@@ -59,6 +59,7 @@ def test_invalid_native_plan_stops_before_business(tmp_path):
     result=asyncio.run(worker.run_turn('a',{'kind':'message','text':'Return everything.'},config))
     assert result['status']=='failed'
     assert result['failure_reason']=='invalid_cancel_goal'
+    assert result['usage']['tool_calls']==1
     assert len(model.inputs)==1
 
 
@@ -204,3 +205,58 @@ def test_unchanged_goal_refresh_preserves_frozen_unproven_targets(tmp_path):
     assert worker._load_runtime('a')['cancel_goal']['targets']==targets
     assert result['status']=='failed'
     assert result['failure_reason']=='cancel_goal_incomplete'
+
+
+def test_cancel_goal_rejects_explicit_keep_and_return_only_evidence():
+    assert not validate_goal({'scope':'selected','order_ids':['#W5056519'],'source_quote':'Keep #W5056519. Cancel #W5995614 instead.'}, ['Keep #W5056519. Cancel #W5995614 instead.'])
+    assert not validate_goal({'scope':'selected','order_ids':['#W5056519'],'source_quote':'Please return order #W5056519.'}, ['Please return order #W5056519.'])
+    assert not validate_goal({'scope':'all_pending','order_ids':[],'source_quote':'Cancel all pending orders.'}, ['Cancel all pending orders.','Keep #W5056519.'])
+    assert validate_goal({'scope':'selected','order_ids':['#W5995614'],'source_quote':'Keep #W5056519. Cancel #W5995614 instead.'}, ['Keep #W5056519. Cancel #W5995614 instead.'])
+
+
+def test_goal_reference_resolution_uses_original_ids_and_rejects_invalid_indices():
+    from retailflow.cancel_goals import resolve_goal_references
+    messages=['Cancel #W5056519.','Keep #W5056519. Cancel #W5995614 instead.']
+    assert resolve_goal_references({'scope':'selected','order_indices':[1],'source_message_index':1},messages)=={'scope':'selected','order_ids':['#W5995614'],'source_quote':messages[1]}
+    for bad in (-1,2,True,'1'):
+        assert resolve_goal_references({'scope':'selected','order_indices':[bad],'source_message_index':1},messages) is None
+    assert resolve_goal_references({'scope':'selected','order_indices':[1,1],'source_message_index':1},messages) is None
+    assert resolve_goal_references({'scope':'selected','order_indices':[0],'source_message_index':1},messages) is None
+
+
+def test_reference_goal_runtime_stores_resolved_original_values(tmp_path):
+    import asyncio
+    from test_agent_loop import runtime,call
+    text='Yara Muller, 85041. Cancel #W5056519; ordered by mistake.'
+    worker,model,config=runtime(tmp_path,[
+        call('update_cancel_goal',{'scope':'selected','order_indices':[0],'source_message_index':0},'goal'),
+        call('find_user_id_by_name_zip',{'first_name':'Yara','last_name':'Muller','zip':'85041'},'id'),
+        call('get_order_details',{'order_id':'#W5056519'},'o'),
+        call('cancel_pending_order',{'order_id':'#W5056519','reason':'ordered by mistake'},'c'),
+    ],cancel_goal_tracking=True,cancel_goal_references=True)
+    result=asyncio.run(worker.run_turn('a',{'kind':'message','text':text},config))
+    assert result['status']=='needs_confirmation'
+    goal=worker._load_runtime('a')['cancel_goal']
+    assert goal['order_ids']==['#W5056519'] and goal['source_quote']==text
+    assert 'candidate_orders' in model.inputs[0][1].content
+
+
+def test_goal_resolution_survives_model_context_filter():
+    import json
+    from langchain_core.messages import ToolMessage
+    from retailflow.context import _tool_view
+    data={'scope':'selected','order_ids':['#W5056519'],'source_quote':'Cancel #W5056519.'}
+    message=ToolMessage(content=json.dumps({'ok':True,'code':'GOAL_RECORDED','data':data}),name='update_cancel_goal',tool_call_id='g')
+    assert json.loads(_tool_view(message).content)['data']==data
+
+
+def test_reference_source_index_and_legal_call_accounting():
+    from retailflow.cancel_goals import resolve_goal_references
+    from retailflow.evaluation import _tool_stats
+    from langchain_core.messages import HumanMessage
+    from test_agent_loop import call
+    text='Cancel #W5056519.'
+    for source in (-1,1,True,'0'):
+        assert resolve_goal_references({'scope':'selected','order_indices':[0],'source_message_index':source},[text]) is None
+    valid=call('update_cancel_goal',{'scope':'selected','order_indices':[0],'source_message_index':0},'goal')
+    assert _tool_stats([HumanMessage(content=text),valid])[0]['legal_tool_requests']==1

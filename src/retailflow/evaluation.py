@@ -17,7 +17,7 @@ from pathlib import Path
 
 import httpx
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-from retailflow.cancel_goals import validate_goal
+from retailflow.cancel_goals import validate_goal, resolve_goal_references
 
 from retailflow.dataset import ROOT, check_final_state, validate_dataset
 from retailflow.environment import RetailEnvironment
@@ -163,7 +163,8 @@ def _tool_stats(messages):
                                  and all(f in {"identity", "order", "cancel_reason", "return_items", "refund_method"} for f in args["fields"])
                                  and len(set(args["fields"])) == len(args["fields"]))
                 elif name == "update_cancel_goal":
-                    legal += int(validate_goal(args, customer_messages))
+                    legal += int(bool(resolve_goal_references(args, customer_messages))
+                                 if "source_message_index" in args else validate_goal(args, customer_messages))
         elif isinstance(message, ToolMessage):
             result = json.loads(message.content)
             blocked += result.get("code") in {"AUTH_REQUIRED", "POLICY_DENIED", "INVALID_ARGUMENT", "UNKNOWN_TOOL", "PROTOCOL_ERROR", "MISSING_USER_INFORMATION"}

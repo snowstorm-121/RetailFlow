@@ -1,0 +1,74 @@
+[
+  {
+    "case": "negated",
+    "resolved": {
+      "scope": "none",
+      "order_ids": [],
+      "source_quote": "I do not want to cancel order #W5056519."
+    },
+    "correct": true,
+    "rejected": false
+  },
+  {
+    "case": "withdraw_polite",
+    "resolved": null,
+    "correct": false,
+    "rejected": true
+  },
+  {
+    "case": "replace",
+    "resolved": null,
+    "correct": false,
+    "rejected": true
+  },
+  {
+    "case": "narrow",
+    "resolved": {
+      "scope": "selected",
+      "order_ids": [
+        "#W5995614"
+      ],
+      "source_quote": "Only cancel #W5995614; keep #W5056519."
+    },
+    "correct": true,
+    "rejected": false
+  },
+  {
+    "case": "reason",
+    "resolved": {
+      "scope": "all_pending",
+      "order_ids": [],
+      "source_quote": "Please cancel all pending orders."
+    },
+    "correct": true,
+    "rejected": false
+  },
+  {
+    "case": "query",
+    "resolved": {
+      "scope": "none",
+      "order_ids": [],
+      "source_quote": "What is the status of order #W5056519?"
+    },
+    "correct": true,
+    "rejected": false
+  },
+  {
+    "case": "return",
+    "resolved": null,
+    "correct": false,
+    "rejected": true
+  },
+  {
+    "case": "correction_then_reason",
+    "resolved": {
+      "scope": "selected",
+      "order_ids": [
+        "#W5995614"
+      ],
+      "source_quote": "Actually only cancel #W5995614."
+    },
+    "correct": true,
+    "rejected": false
+  }
+]

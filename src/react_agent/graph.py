@@ -159,6 +159,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
 
     from retailflow.context import ContextBudgetExceeded, build_model_context
     from retailflow.cancel_goals import GOAL_TOOL, GOAL_PROMPT, validate_goal, goal_progress
+    from retailflow.cancel_goals import GOAL_REFERENCE_TOOL, GOAL_REFERENCE_PROMPT, goal_reference_input, resolve_goal_references
 
     config = config or {}
     metrics.setdefault("dialogue_repairs", 0)
@@ -209,7 +210,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         if information_repair or missing_identity:
             offered = [RETAIL_TOOLS[-1]]
         if planning:
-            offered = [GOAL_TOOL]
+            offered = [GOAL_REFERENCE_TOOL if config.get("cancel_goal_references", False) else GOAL_TOOL]
         model = model_factory(runtime.context).bind_tools(offered)
         isolated_repair = config.get("isolated_information_repair", False)
         if information_repair and (session.get("user_id") or isolated_repair):
@@ -249,10 +250,12 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                                     additional_kwargs={"protocol_retry_input": True})]
             model_messages = [SystemMessage(content=prompt), *visible]
         if planning:
-            prompt = GOAL_PROMPT
+            references = config.get("cancel_goal_references", False)
+            prompt = GOAL_REFERENCE_PROMPT if references else GOAL_PROMPT
             examples = []
-            visible = [HumanMessage(content=json.dumps({"customer_messages": [m.content for m in state["messages"]
-                       if isinstance(m, HumanMessage)]}, ensure_ascii=False))]
+            customer_messages = [m.content for m in state["messages"] if isinstance(m, HumanMessage)]
+            payload = goal_reference_input(customer_messages) if references else {"customer_messages": customer_messages}
+            visible = [HumanMessage(content=json.dumps(payload, ensure_ascii=False))]
             model_messages = [SystemMessage(content=prompt), *visible]
         if repair == "receipt_review":
             prompt = ("Correct the draft using the verified receipt. Preserve and answer the customer's additional questions "
@@ -390,17 +393,22 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             result = {"ok": False, "code": "INVALID_ARGUMENT", "message": "This tool was not offered in the current model request."}
             status, request = "running", None
         elif name == "update_cancel_goal":
-            if not validate_goal(args, [m.content for m in state["messages"] if isinstance(m, HumanMessage)]):
+            customer_messages = [m.content for m in state["messages"] if isinstance(m, HumanMessage)]
+            plan = (resolve_goal_references(args, customer_messages) if config.get("cancel_goal_references", False)
+                    else args if validate_goal(args, customer_messages) else None)
+            if plan is None:
                 result = {"ok": False, "code": "INVALID_ARGUMENT", "message": "Invalid cancellation goal; no business action allowed."}
                 message = ToolMessage(content=json.dumps(result), name=name, tool_call_id=call["id"], status="error")
+                metrics["tool_calls"] += 1
+                metrics["tool_seconds"] += time.perf_counter() - start
                 persist(state, [message])
                 return {"messages": [message], "status": "failed", "failure_reason": "invalid_cancel_goal"}
-            targets = (goal_state.get("targets") if goal_state.get("scope") == args["scope"]
-                       and goal_state.get("order_ids") == args["order_ids"] else None)
+            targets = (goal_state.get("targets") if goal_state.get("scope") == plan["scope"]
+                       and goal_state.get("order_ids") == plan["order_ids"] else None)
             goal_state.clear()
-            goal_state.update(args, targets=targets, needs_refresh=False)
+            goal_state.update(plan, targets=targets, needs_refresh=False)
             persist_goal()
-            result = {"ok": True, "code": "GOAL_RECORDED", "data": args}
+            result = {"ok": True, "code": "GOAL_RECORDED", "data": plan}
             status, request = "running", None
         elif name == "ask_user":
             if (set(args) == {"fields", "question"} and isinstance(args["question"], str) and args["question"]

@@ -10,7 +10,8 @@ VISIBLE_FIELDS = {"order_id", "user_id", "status", "items", "item_id", "product_
                   "return_items", "return_payment_method_id", "cancel_reason", "balance", "address",
                   "first_name", "last_name", "zip", "email", "fulfillments", "code", "ok",
                   "proposal_id", "reason", "data", "orders", "order_summaries", "source", "id", "last_four",
-                  "transaction_type", "amount", "variants", "options", "available", "message", "fields", "question"}
+                  "transaction_type", "amount", "variants", "options", "available", "message", "fields", "question",
+                  "scope", "order_ids", "source_quote"}
 
 
 class ContextBudgetExceeded(ValueError):

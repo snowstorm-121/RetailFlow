@@ -1,0 +1,127 @@
+[
+  {
+    "case": "negated",
+    "messages": [
+      "I do not want to cancel order #W5056519."
+    ],
+    "expected_scope": "none",
+    "expected_ids": [],
+    "args": {
+      "scope": "none",
+      "order_ids": [],
+      "source_quote": "I do not want to cancel order #W5056519."
+    },
+    "passed": true
+  },
+  {
+    "case": "withdraw_polite",
+    "messages": [
+      "Cancel all of my pending orders.",
+      "Actually, leave everything as it is."
+    ],
+    "expected_scope": "none",
+    "expected_ids": [],
+    "args": {},
+    "passed": false
+  },
+  {
+    "case": "replace",
+    "messages": [
+      "Cancel #W5056519.",
+      "Keep #W5056519. Cancel #W5995614 instead."
+    ],
+    "expected_scope": "selected",
+    "expected_ids": [
+      "#W5995614"
+    ],
+    "args": {
+      "scope": "selected",
+      "order_ids": [
+        "#W5995614"
+      ],
+      "source_quote": "Keep #W5056519. Cancel #W5995619 instead."
+    },
+    "passed": false
+  },
+  {
+    "case": "narrow",
+    "messages": [
+      "Cancel #W5056519 and #W5995614.",
+      "Only cancel #W5995614; keep #W5056519."
+    ],
+    "expected_scope": "selected",
+    "expected_ids": [
+      "#W5995614"
+    ],
+    "args": {
+      "scope": "selected",
+      "order_ids": [
+        "#W5995614"
+      ],
+      "source_quote": "Only cancel #W5995614; keep #W5056519."
+    },
+    "passed": true
+  },
+  {
+    "case": "reason",
+    "messages": [
+      "Please cancel all pending orders.",
+      "My email is yara@example.com.",
+      "I no longer need them."
+    ],
+    "expected_scope": "all_pending",
+    "expected_ids": [],
+    "args": {
+      "order_ids": [],
+      "source_quote": "Please cancel all pending orders.",
+      "scope": "all_pending"
+    },
+    "passed": true
+  },
+  {
+    "case": "query",
+    "messages": [
+      "What is the status of order #W5056519?"
+    ],
+    "expected_scope": "none",
+    "expected_ids": [],
+    "args": {},
+    "passed": false
+  },
+  {
+    "case": "return",
+    "messages": [
+      "Please return the delivered order #W5056519."
+    ],
+    "expected_scope": "none",
+    "expected_ids": [],
+    "args": {
+      "scope": "selected",
+      "order_ids": [
+        "W5056519"
+      ],
+      "source_quote": "Please return the delivered order #W5056519."
+    },
+    "passed": false
+  },
+  {
+    "case": "correction_then_reason",
+    "messages": [
+      "Cancel all pending orders.",
+      "Actually only cancel #W5995614.",
+      "I ordered it by mistake."
+    ],
+    "expected_scope": "selected",
+    "expected_ids": [
+      "#W5995614"
+    ],
+    "args": {
+      "scope": "selected",
+      "order_ids": [
+        "#W5995604"
+      ],
+      "source_quote": "Actually only cancel #W5995614."
+    },
+    "passed": false
+  }
+]

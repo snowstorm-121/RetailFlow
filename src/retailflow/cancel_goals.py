@@ -1,5 +1,6 @@
 """Experimental cancellation ledger; a recorded goal never authorizes a write."""
 import re
+from copy import deepcopy
 
 GOAL_TOOL = {'type': 'function', 'function': {
     'name': 'update_cancel_goal',
@@ -15,6 +16,37 @@ GOAL_PROMPT = ('Read the customer messages in chronological order. Record the la
                'an earlier request. For all_pending or none use an empty order_ids list. For selected use only exact order IDs '
                'the customer supplied. source_quote must quote the customer message establishing the latest scope. Never output plain text.')
 
+GOAL_REFERENCE_TOOL = deepcopy(GOAL_TOOL)
+GOAL_REFERENCE_TOOL['function']['parameters'] = {
+    'type': 'object', 'properties': {
+        'scope': {'type': 'string', 'enum': ['none', 'all_pending', 'selected']},
+        'order_indices': {'type': 'array', 'items': {'type': 'integer'}},
+        'source_message_index': {'type': 'integer'}},
+    'required': ['scope', 'order_indices', 'source_message_index'], 'additionalProperties': False}
+GOAL_REFERENCE_PROMPT = (GOAL_PROMPT.replace('order_ids', 'order_indices')
+    .replace('For selected use only exact order IDs the customer supplied.', 'For selected use zero-based indices from candidate_orders.')
+    .replace('source_quote must quote', 'source_message_index must identify'))
+
+
+def goal_reference_input(customer_messages):
+    orders = list(dict.fromkeys(ident for text in customer_messages for ident in re.findall(r'#W\d+(?!\w)', text)))
+    return {'customer_messages': [{'index': i, 'text': text} for i, text in enumerate(customer_messages)],
+            'candidate_orders': [{'index': i, 'order_id': ident} for i, ident in enumerate(orders)]}
+
+
+def resolve_goal_references(args, customer_messages):
+    if set(args) != {'scope', 'order_indices', 'source_message_index'}:
+        return None
+    source, indices = args['source_message_index'], args['order_indices']
+    orders = goal_reference_input(customer_messages)['candidate_orders']
+    if type(source) is not int or not 0 <= source < len(customer_messages):
+        return None
+    if not isinstance(indices, list) or not all(type(i) is int and 0 <= i < len(orders) for i in indices):
+        return None
+    goal = {'scope': args['scope'], 'order_ids': [orders[i]['order_id'] for i in indices],
+            'source_quote': customer_messages[source]}
+    return goal if validate_goal(goal, customer_messages) else None
+
 
 def validate_goal(args, customer_messages):
     if set(args) != {'scope', 'order_ids', 'source_quote'}:
@@ -26,6 +58,14 @@ def validate_goal(args, customer_messages):
         return False
     if len(set(ids)) != len(ids):
         return False
+    if scope != 'none':
+        if not re.search(r'\bcancel(?:led|ed|ling|ing|lation)?\b', quote, re.I):
+            return False
+        source = max(i for i, text in enumerate(customer_messages) if text == quote)
+        kept = {ident for text in customer_messages[source:] for ident in re.findall(
+            r'\b(?:keep|do not cancel|don\x27t cancel)\s+(?:order\s+)?(#W\d+)\b', text, re.I)}
+        if kept and (scope == 'all_pending' or kept.intersection(ids)):
+            return False
     return bool(ids) and all(re.search(re.escape(i) + r'(?!\w)', quote) for i in ids) if scope == 'selected' else not ids
 
 
