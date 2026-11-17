@@ -1,0 +1,98 @@
+{
+  "task_id": "tau-retail-24",
+  "category": "multiturn_change",
+  "status": "answered",
+  "requires_write": false,
+  "success": false,
+  "objective_passed": true,
+  "state_passed": true,
+  "state_failures": [],
+  "policy_passed": true,
+  "policy_failures": [],
+  "required_info_literal_match": false,
+  "review_required": false,
+  "communication_review": {
+    "decision": "fail",
+    "reason": "The final answer identifies the red cotton shirt in W6876713 instead of the blue cotton and black polyester pair in W9609649.",
+    "reviewer": "Codex assistant-assisted offline semantic review",
+    "rubric_version": "t6-v1",
+    "source_result_sha256": "8d6f73db0ede588ebd0b5728a17b174870816f61a4457ffa13fa31633903c152"
+  },
+  "model_tool_requests": 7,
+  "legal_tool_requests": 7,
+  "blocked_requests": 0,
+  "variant": "B2",
+  "thread_id": "B2-tau-retail-24-34d66a75",
+  "failure_reason": "communication_failure",
+  "failure_category": "communication",
+  "fault_registered": false,
+  "fault_triggered": 0,
+  "usage": {
+    "model_calls": 9,
+    "tool_calls": 7,
+    "retries": 0,
+    "dialogue_repairs": 1,
+    "input_tokens": 16557,
+    "output_tokens": 395
+  },
+  "elapsed_seconds": 63.126,
+  "memory": {
+    "python_peak_rss_bytes": 123600896,
+    "ollama_observed_rss_bytes": 386596864,
+    "ollama_reported_loaded_model_bytes": 4119016480
+  },
+  "trace_paths": [
+    "artifacts/order-summary-retest-20261117/baseline/traces/20261117T134443Z-793ed525.json",
+    "artifacts/order-summary-retest-20261117/baseline/traces/20261117T134511Z-2b5470ba.json",
+    "artifacts/order-summary-retest-20261117/baseline/traces/20261117T134519Z-6fe3302c.json",
+    "artifacts/order-summary-retest-20261117/baseline/traces/20261117T134520Z-ab0937b9.json",
+    "artifacts/order-summary-retest-20261117/baseline/traces/20261117T134539Z-82b17a9a.json"
+  ],
+  "events": [
+    {
+      "type": "user_event",
+      "kind": "message",
+      "text": "I'd like to cancel the grill I ordered."
+    },
+    {
+      "type": "user_event",
+      "kind": "message",
+      "text": "You are Sofia Hernandez, and you live in Seattle, WA, 98193."
+    },
+    {
+      "type": "user_event",
+      "kind": "message",
+      "text": "I ordered it by mistake."
+    },
+    {
+      "type": "user_event",
+      "kind": "confirmation",
+      "proposal_id": "df24f96745b642289948dc736c6afa2f",
+      "accepted": false
+    },
+    {
+      "type": "assistant_message",
+      "text": "The proposed action was declined; no business change was made."
+    },
+    {
+      "type": "user_event",
+      "kind": "message",
+      "text": "Actually, keep the grill. Which two T-shirts did I order in another order, and what materials are they?"
+    },
+    {
+      "type": "assistant_message",
+      "text": "In your order #W6876713, you ordered the following two T-shirts:\n\n1. **T-Shirt**  \n   - Color: Red  \n   - Size: Large (L)  \n   - Material: Cotton  \n   - Style: V-neck  \n\nThis is the only T-shirt in your order. There is no second T-shirt listed.  \n\nIf you have any other questions or need further assistance, feel free to ask!"
+    }
+  ],
+  "first_observed_error": null,
+  "state_hash_before": "f08162ba14d2d3ce9ebe4ebc0fa3cd4bdc2876eaaf9d3411802cdba96ea1f41a",
+  "state_hash_after": "f08162ba14d2d3ce9ebe4ebc0fa3cd4bdc2876eaaf9d3411802cdba96ea1f41a",
+  "expected_checks": {
+    "communicate_info": [
+      "polyester",
+      "cotton"
+    ],
+    "orders": [],
+    "transfer_to_human": false
+  }
+}

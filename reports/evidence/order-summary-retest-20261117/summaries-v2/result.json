@@ -1,0 +1,92 @@
+{
+  "task_id": "tau-retail-24",
+  "category": "multiturn_change",
+  "status": "answered",
+  "requires_write": false,
+  "success": false,
+  "objective_passed": true,
+  "state_passed": true,
+  "state_failures": [],
+  "policy_passed": true,
+  "policy_failures": [],
+  "required_info_literal_match": true,
+  "review_required": true,
+  "communication_review": null,
+  "model_tool_requests": 5,
+  "legal_tool_requests": 5,
+  "blocked_requests": 0,
+  "variant": "B2",
+  "thread_id": "B2-tau-retail-24-c39fb99f",
+  "failure_reason": "communication_review_pending",
+  "failure_category": null,
+  "fault_registered": false,
+  "fault_triggered": 0,
+  "usage": {
+    "model_calls": 8,
+    "tool_calls": 5,
+    "retries": 0,
+    "dialogue_repairs": 2,
+    "input_tokens": 17091,
+    "output_tokens": 637
+  },
+  "elapsed_seconds": 180.285,
+  "memory": {
+    "python_peak_rss_bytes": 123600896,
+    "ollama_observed_rss_bytes": 422592512,
+    "ollama_reported_loaded_model_bytes": 4119016480
+  },
+  "trace_paths": [
+    "artifacts/order-summary-retest-20261117/summaries-v2/traces/20261117T135444Z-ee56a3d7.json",
+    "artifacts/order-summary-retest-20261117/summaries-v2/traces/20261117T135607Z-8dfc34d8.json",
+    "artifacts/order-summary-retest-20261117/summaries-v2/traces/20261117T135716Z-0548e168.json",
+    "artifacts/order-summary-retest-20261117/summaries-v2/traces/20261117T135716Z-2d7ceb36.json",
+    "artifacts/order-summary-retest-20261117/summaries-v2/traces/20261117T135756Z-b4796ca5.json"
+  ],
+  "events": [
+    {
+      "type": "user_event",
+      "kind": "message",
+      "text": "I'd like to cancel the grill I ordered."
+    },
+    {
+      "type": "user_event",
+      "kind": "message",
+      "text": "You are Sofia Hernandez, and you live in Seattle, WA, 98193."
+    },
+    {
+      "type": "user_event",
+      "kind": "message",
+      "text": "I ordered it by mistake."
+    },
+    {
+      "type": "user_event",
+      "kind": "confirmation",
+      "proposal_id": "7d9c3a4bf45b420b93b49d13fa75951a",
+      "accepted": false
+    },
+    {
+      "type": "assistant_message",
+      "text": "The proposed action was declined; no business change was made."
+    },
+    {
+      "type": "user_event",
+      "kind": "message",
+      "text": "Actually, keep the grill. Which two T-shirts did I order in another order, and what materials are they?"
+    },
+    {
+      "type": "assistant_message",
+      "text": "I see you'd like to know about the T-shirts you ordered.  \n\nFrom your order history, here are the two T-shirts in your order **#W9609649** (status: processed):  \n\n1. **T-Shirt (Red, Large, Cotton, V-Neck)**  \n   - Material: Cotton  \n\n2. **T-Shirt (Blue, Medium, Cotton, Crew Neck)**  \n   - Material: Cotton  \n\nAnd the third T-shirt in that order:  \n- **T-Shirt (Black, Small, Polyester, Crew Neck)**  \n   - Material: Polyester  \n\nSo, you ordered **three** T-shirts in total.  \n\nIf you'd like to return or modify any of these, please let me know. Otherwise, I can assist with anything else.  \n\nLet me know how I can help further!"
+    }
+  ],
+  "first_observed_error": null,
+  "state_hash_before": "f08162ba14d2d3ce9ebe4ebc0fa3cd4bdc2876eaaf9d3411802cdba96ea1f41a",
+  "state_hash_after": "f08162ba14d2d3ce9ebe4ebc0fa3cd4bdc2876eaaf9d3411802cdba96ea1f41a",
+  "expected_checks": {
+    "communicate_info": [
+      "polyester",
+      "cotton"
+    ],
+    "orders": [],
+    "transfer_to_human": false
+  }
+}

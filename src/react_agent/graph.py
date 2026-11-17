@@ -338,8 +338,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                         "status": "failed", "failure_reason": "information_request_not_structured"}
             text = response.content
             proposal_missing = (isinstance(text, str) and session.get("user_id")
-                                and session.get("target_order_status") in {"pending", "delivered"}
-                                and re.search(r"please confirm|(?:could|can|would) you confirm|do you (?:confirm|want)|would you like me to (?:proceed|cancel|return)|\b(?:proposal|return request|cancellation request)(?: (?:has been |was )?| for [^.!?\n]+? (?:has been |was ))(?:successfully )?(?:created|submitted)\b", text, re.I)
+                                and session.get("target_order_status") in {None, "pending", "delivered"}
+                                and re.search(r"please confirm|(?:could|can|would) you confirm|do you (?:confirm|want)|would you like me to (?:proceed|cancel|return)|\b(?:proposal|return request|cancellation request)(?: (?:has been |was |is now )?| for [^.!?\n]+? (?:has been |was |is now ))(?:successfully )?(?:created|submitted|staged)\b", text, re.I)
                                 and re.search(r"cancel|return", text, re.I))
             explicit_confirmation = (isinstance(text, str) and re.search(
                 r"please confirm (?:if|whether) you (?:would like|want|wish)|would you like me to (?:proceed|cancel|return)|do you want me to",

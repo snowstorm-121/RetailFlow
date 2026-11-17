@@ -504,3 +504,31 @@ def test_isolated_proposal_repair_does_not_extend_model_budget(tmp_path):
     assert result['status'] == 'budget_exceeded'
     assert len(model.inputs) == 3
     assert worker.environment.pending_proposal('a') is None
+
+
+def test_staged_claim_without_order_read_requires_native_proposal(tmp_path):
+    worker,_,config=runtime(tmp_path,[
+        call('find_user_id_by_name_zip',{'first_name':'Yara','last_name':'Muller','zip':'85041'},'identity'),
+        AIMessage(content='The cancellation proposal is now staged and ready for confirmation.'),
+        call('get_order_details',{'order_id':'#W5056519'},'order'),
+        call('cancel_pending_order',{'order_id':'#W5056519','reason':'ordered by mistake'},'proposal'),
+    ],isolated_proposal_repair=True)
+    result=asyncio.run(worker.run_turn('a',{'kind':'message','text':'Yara Muller, 85041. Cancel #W5056519, ordered by mistake.'},config))
+    assert result['status']=='needs_confirmation'
+    assert result['usage']['dialogue_repairs']==1
+    assert worker.environment.get_order('a','#W5056519')['status']=='pending'
+
+
+@pytest.mark.parametrize('text',[
+    'The cancellation proposal is not staged.',
+    'The cancellation proposal will be staged after the order is checked.',
+    'Once the cancellation proposal is staged, you will be asked to confirm it.',
+])
+def test_unstaged_explanation_without_order_read_is_not_a_claim(tmp_path,text):
+    worker,_,config=runtime(tmp_path,[
+        call('find_user_id_by_name_zip',{'first_name':'Yara','last_name':'Muller','zip':'85041'},'identity'),
+        AIMessage(content=text),
+    ])
+    result=asyncio.run(worker.run_turn('a',{'kind':'message','text':'Yara Muller, 85041. Check my account.'},config))
+    assert result['status']=='answered'
+    assert result['usage']['dialogue_repairs']==0
