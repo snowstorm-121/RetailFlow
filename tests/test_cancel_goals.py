@@ -260,3 +260,97 @@ def test_reference_source_index_and_legal_call_accounting():
         assert resolve_goal_references({'scope':'selected','order_indices':[0],'source_message_index':source},[text]) is None
     valid=call('update_cancel_goal',{'scope':'selected','order_indices':[0],'source_message_index':0},'goal')
     assert _tool_stats([HumanMessage(content=text),valid])[0]['legal_tool_requests']==1
+
+
+import pytest
+
+
+@pytest.mark.parametrize('text', [
+    'I want to cancel all of my pending orders.',
+    'Cancel all my pending orders',
+    'Please cancel all pending orders.',
+    "I'd like to cancel all of my pending orders!",
+    '  CANCEL ALL MY PENDING ORDERS.  ',
+])
+def test_explicit_all_pending_activation(text):
+    from retailflow.cancel_goals import is_explicit_all_pending_request
+    assert is_explicit_all_pending_request(text)
+
+
+@pytest.mark.parametrize('text', [
+    "Don't cancel all my pending orders.",
+    'Can I cancel all my pending orders?',
+    'If possible, cancel all my pending orders.',
+    'Cancel all my pending orders except #W1.',
+    'Cancel all my pending orders. Actually keep #W1.',
+    'Cancel all my pending orders and return my laptop.',
+    'Please undo an order I cancelled.',
+    'Return everything except the coffee machine.',
+    'Cancel the grill I ordered.',
+    'Cancel #W1.',
+    'What does "cancel all my pending orders" mean?',
+    '',
+])
+def test_activation_leaves_other_or_ambiguous_requests_on_normal_path(text):
+    from retailflow.cancel_goals import is_explicit_all_pending_request
+    assert not is_explicit_all_pending_request(text)
+
+
+def test_scoped_goal_does_not_intercept_other_business(tmp_path):
+    import asyncio
+    from test_agent_loop import runtime, call
+    worker, model, config = runtime(tmp_path, [
+        call('ask_user', {'fields': ['identity'], 'question': 'Please give your name and ZIP.'}, 'ask'),
+    ], cancel_goal_tracking=True, cancel_goal_activation='explicit_all_pending')
+    result = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text': 'Return my laptop.'}, config))
+    assert result['status'] == 'needs_input'
+    assert 'cancel_goal' not in worker._load_runtime('a')
+    assert 'update_cancel_goal' not in [t['function']['name'] for t in model.bound_tools]
+
+
+def test_scoped_goal_stays_active_for_withdrawal_after_restart(tmp_path):
+    import asyncio
+    from langchain_core.messages import AIMessage
+    from retailflow.runtime import RetailRuntime
+    from test_agent_loop import runtime, call
+    text = 'Please cancel all pending orders.'
+    worker, model, config = runtime(tmp_path, [
+        call('update_cancel_goal', {'scope': 'all_pending', 'order_ids': [], 'source_quote': text}, 'goal'),
+        call('ask_user', {'fields': ['identity'], 'question': 'Name and ZIP?'}, 'ask'),
+        call('update_cancel_goal', {'scope': 'none', 'order_ids': [], 'source_quote': 'Keep everything.'}, 'withdraw'),
+        AIMessage(content='No orders were cancelled.'),
+    ], cancel_goal_tracking=True, cancel_goal_activation='explicit_all_pending')
+    first = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text': text}, config))
+    assert first['status'] == 'needs_input'
+    worker = RetailRuntime(tmp_path/'business.sqlite', tmp_path/'traces', model_factory=lambda _: model)
+    second = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text': 'Keep everything.'}, config))
+    assert second['status'] == 'answered'
+    assert worker._load_runtime('a')['cancel_goal']['scope'] == 'none'
+    assert worker.environment.pending_proposal('a') is None
+
+
+def test_scoped_goal_accepts_selected_revision_and_confirmation(tmp_path):
+    import asyncio
+    from langchain_core.messages import AIMessage
+    from test_agent_loop import runtime, call
+    opening = 'Cancel all my pending orders.'
+    revision = 'Yara Muller, 85041. Only cancel #W5056519, ordered by mistake.'
+    worker, _, config = runtime(tmp_path, [
+        call('update_cancel_goal', {'scope': 'all_pending', 'order_ids': [], 'source_quote': opening}, 'goal'),
+        call('ask_user', {'fields': ['identity'], 'question': 'Name and ZIP?'}, 'ask'),
+        call('update_cancel_goal', {'scope': 'selected', 'order_ids': ['#W5056519'], 'source_quote': revision}, 'revise'),
+        call('find_user_id_by_name_zip', {'first_name': 'Yara', 'last_name': 'Muller', 'zip': '85041'}, 'identity'),
+        call('get_order_details', {'order_id': '#W5056519'}, 'read'),
+        call('cancel_pending_order', {'order_id': '#W5056519', 'reason': 'ordered by mistake'}, 'cancel'),
+        AIMessage(content='The selected order was cancelled.'),
+    ], cancel_goal_tracking=True, cancel_goal_activation='explicit_all_pending')
+    assert asyncio.run(worker.run_turn('a', {'kind': 'message', 'text': opening}, config))['status'] == 'needs_input'
+    proposal = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text': revision}, config))
+    assert proposal['status'] == 'needs_confirmation'
+    assert worker.environment.get_order('a', '#W5056519')['status'] == 'pending'
+    result = asyncio.run(worker.run_turn('a', {'kind': 'confirmation', 'accepted': True,
+        'proposal_id': proposal['request']['proposal_id']}, config))
+    assert result['status'] == 'answered'
+    assert worker.environment.get_order('a', '#W5056519')['status'] == 'cancelled'
+    assert worker.environment.get_order('a', '#W5995614')['status'] == 'pending'
+    assert worker._load_runtime('a')['cancel_goal']['scope'] == 'selected'

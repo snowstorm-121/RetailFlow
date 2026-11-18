@@ -2,6 +2,14 @@
 import re
 from copy import deepcopy
 
+
+def is_explicit_all_pending_request(text):
+    """Recognize only a standalone supported command, not general cancellation intent."""
+    return bool(re.fullmatch(
+        r"(?:please |i want to |i would like to |i'd like to )?cancel all (?:of my |my )?pending orders[.!]?",
+        text.strip(), re.I))
+
+
 GOAL_TOOL = {'type': 'function', 'function': {
     'name': 'update_cancel_goal',
     'description': 'Record the current requested cancellation scope. This does not cancel or authorize anything. Use none when cancellation is withdrawn or not requested.',

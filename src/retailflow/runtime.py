@@ -18,6 +18,7 @@ from react_agent.context import Context
 from react_agent.graph import make_retail_graph
 from react_agent.utils import load_chat_model
 from retailflow.environment import RetailEnvironment
+from retailflow.cancel_goals import is_explicit_all_pending_request
 from retailflow.upstream.paths import RETAIL_DB_PATH
 
 
@@ -161,7 +162,11 @@ class RetailRuntime:
         if status is None:
             self._save_messages(thread_id, messages)
             goal_state = None
-            if config.get("cancel_goal_tracking", False):
+            track_goal = config.get("cancel_goal_tracking", False)
+            if config.get("cancel_goal_activation") == "explicit_all_pending":
+                track_goal = track_goal and ("cancel_goal" in metadata or (
+                    user_event["kind"] == "message" and is_explicit_all_pending_request(user_event["text"])))
+            if track_goal:
                 goal_state = metadata.setdefault("cancel_goal", {"needs_refresh": True})
                 if user_event["kind"] == "message":
                     goal_state["needs_refresh"] = True
