@@ -532,3 +532,26 @@ def test_unstaged_explanation_without_order_read_is_not_a_claim(tmp_path,text):
     result=asyncio.run(worker.run_turn('a',{'kind':'message','text':'Yara Muller, 85041. Check my account.'},config))
     assert result['status']=='answered'
     assert result['usage']['dialogue_repairs']==0
+
+
+@pytest.mark.parametrize('native_finish', [False, True])
+def test_proposal_recovery_survives_intermediate_read(tmp_path, native_finish):
+    final = (call('cancel_pending_order', {'order_id': '#W5056519', 'reason': 'ordered by mistake'}, 'proposal')
+             if native_finish else AIMessage(content='The cancellation is being processed.'))
+    worker, model, config = runtime(tmp_path, [
+        call('find_user_id_by_name_zip', {'first_name': 'Yara', 'last_name': 'Muller', 'zip': '85041'}, 'identity'),
+        AIMessage(content='The cancellation proposal is now staged.'),
+        call('get_order_details', {'order_id': '#W5056519'}, 'read'),
+        final,
+    ], isolated_proposal_repair=True)
+    result = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text':
+        'Yara Muller, 85041. Cancel #W5056519, ordered by mistake.'}, config))
+    assert model.inputs[-1][-1].additional_kwargs.get('protocol_retry_input')
+    assert 'The cancellation proposal is now staged.' not in model.inputs[-1][-1].content
+    assert 'get_order_details' in model.inputs[-1][-1].content
+    assert result['status'] == ('needs_confirmation' if native_finish else 'failed')
+    if not native_finish:
+        assert result['failure_reason'] == 'proposal_not_created'
+    assert result['usage']['dialogue_repairs'] == 1
+    assert result['usage']['model_calls'] == 4
+    assert worker.environment.get_order('a', '#W5056519')['status'] == 'pending'

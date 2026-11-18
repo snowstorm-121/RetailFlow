@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, messages_from_dict, messages_to_dict
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage, messages_from_dict, messages_to_dict
 
 from react_agent.context import Context
 from react_agent.graph import make_retail_graph
@@ -240,6 +240,18 @@ class RetailRuntime:
             if remaining:
                 text += f"Remaining items were not returned and are not eligible for another return in this order: {remaining}. "
             text += "The policy expects return instructions by email; this local application sends no real email."
+            if config.get("catalog_availability_facts", False):
+                products = {}
+                for message in messages:
+                    if isinstance(message, ToolMessage) and message.name == "get_product_details":
+                        lookup = json.loads(message.content)
+                        if lookup.get("ok") and "available_variant_count" in lookup.get("data", {}):
+                            product = lookup["data"]
+                            products[product["product_id"]] = product
+                if products:
+                    text += " Last successful catalog lookups: " + "; ".join(
+                        f"{p['name']} ({p['product_id']}): {p['available_variant_count']} available variants"
+                        for p in products.values()) + "."
             messages.append(AIMessage(content=text, additional_kwargs={"application_rendered_receipt": True}))
             metrics["application_rendered_receipt"] = True
         if confirmed_outcome and status in {"failed", "budget_exceeded"}:

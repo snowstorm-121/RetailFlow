@@ -164,12 +164,14 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
     config = config or {}
     metrics.setdefault("dialogue_repairs", 0)
     metrics.setdefault("receipt_reviews", 0)
+    proposal_repair_active = False
 
     def persist(state, messages):
         if persist_messages:
             persist_messages(add_messages(state["messages"], messages))
 
     async def retail_model(state: RetailState, runtime: Runtime[Context]):
+        nonlocal proposal_repair_active
         if state["model_calls"] >= max_model_calls:
             return {"status": "budget_exceeded", "failure_reason": "model_call_budget"}
         prompt = runtime.context.system_prompt.format(system_time=datetime.now(tz=UTC).isoformat())
@@ -228,7 +230,9 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                               *examples, *visible]
         else:
             model_messages = [SystemMessage(content=prompt), *examples, *visible]
-        proposal_repair = repair == "proposal" and config.get("isolated_proposal_repair", False)
+        proposal_repair_active = proposal_repair_active or (
+            repair == "proposal" and config.get("isolated_proposal_repair", False))
+        proposal_repair = proposal_repair_active
         if proposal_repair:
             events = []
             for message in visible:
@@ -443,6 +447,9 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             status = {"CONFIRMATION_REQUIRED": "needs_confirmation", "POLICY_DENIED": "refused",
                       "OK": "handed_off" if name == "transfer_to_human_agents" else "running"}.get(result["code"], "running")
             request = result.get("proposal") if status == "needs_confirmation" else None
+        if config.get("catalog_availability_facts", False) and name == "get_product_details" and result["ok"]:
+            result["data"]["available_variant_count"] = sum(
+                variant["available"] is True for variant in result["data"]["variants"].values())
         if config.get("profile_order_summaries", False) and name == "get_user_details" and result["ok"]:
             session = environment.load_session(thread_id)
             result["data"]["order_summaries"] = [
