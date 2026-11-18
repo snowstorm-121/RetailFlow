@@ -287,9 +287,10 @@ def build_manifest(config_path: Path, config: dict) -> dict:
     if not model or model["digest"] != config["expected_model_digest"]:
         raise ValueError("The fixed local model is missing or its digest changed; no download was attempted.")
     runtime = httpx.get(execution["base_url"] + "/api/version", timeout=5).json()
+    dataset_root = (ROOT / config.get("dataset_root", ".")).resolve()
     paths = [*sorted((ROOT / "src").rglob("*.py")), ROOT / "uv.lock", config_path.resolve(),
-             ROOT / "data/manifests/dataset.json", ROOT / "data/manifests/sources.json",
-             ROOT / "data/derived/dev.jsonl", ROOT / "data/derived/test.jsonl"]
+             dataset_root / "data/manifests/dataset.json", dataset_root / "data/manifests/sources.json",
+             dataset_root / "data/derived/dev.jsonl", dataset_root / "data/derived/test.jsonl"]
     manifest = {"version": "t6-v1", "model": model, "ollama_runtime": runtime, "execution": execution,
                 "variants": VARIANTS, "config": config, "python": sys.version,
                 "dependencies": {distribution.metadata["Name"]: distribution.version for distribution in importlib.metadata.distributions()},
@@ -301,11 +302,12 @@ def build_manifest(config_path: Path, config: dict) -> dict:
 
 
 async def evaluate_batch(split: str, variant: str, config_path: Path, output: Path, limit: int | None = None) -> dict:
-    checked = validate_dataset(ROOT / "data/manifests/dataset.json")
+    config = json.loads(config_path.read_text())
+    dataset_root = (ROOT / config.get("dataset_root", ".")).resolve()
+    checked = validate_dataset(dataset_root / "data/manifests/dataset.json")
     if not checked["valid"]:
         raise ValueError(f"Frozen dataset failed validation: {checked['errors']}")
-    config = json.loads(config_path.read_text())
-    tasks = [json.loads(line) for line in (ROOT / f"data/derived/{split}.jsonl").read_text().splitlines()]
+    tasks = [json.loads(line) for line in (dataset_root / f"data/derived/{split}.jsonl").read_text().splitlines()]
     if limit is not None:
         if limit <= 0:
             raise ValueError("limit must be positive")
