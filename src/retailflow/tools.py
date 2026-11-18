@@ -1,4 +1,4 @@
-"""The fixed eight-tool retail surface; actual business logic remains upstream."""
+"""Retail tool schemas; actual business logic remains upstream."""
 
 from pydantic import BaseModel
 
@@ -13,10 +13,11 @@ SCHEMAS = {
     "get_product_details": {"product_id": str},
     "cancel_pending_order": {"order_id": str, "reason": str},
     "return_delivered_order_items": {"order_id": str, "item_ids": list, "payment_method_id": str},
+    "exchange_delivered_order_items": {"order_id": str, "item_ids": list, "new_item_ids": list, "payment_method_id": str},
     "transfer_to_human_agents": {"summary": str},
 }
 IDENTITY_TOOLS = {"find_user_id_by_email", "find_user_id_by_name_zip"}
-WRITE_TOOLS = {"cancel_pending_order", "return_delivered_order_items"}
+WRITE_TOOLS = {"cancel_pending_order", "return_delivered_order_items", "exchange_delivered_order_items"}
 
 
 def valid_arguments(name: str, args: dict) -> bool:

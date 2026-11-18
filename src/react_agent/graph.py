@@ -343,10 +343,10 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             text = response.content
             proposal_missing = (isinstance(text, str) and session.get("user_id")
                                 and session.get("target_order_status") in {None, "pending", "delivered"}
-                                and re.search(r"please confirm|(?:could|can|would) you confirm|do you (?:confirm|want)|would you like me to (?:proceed|cancel|return)|\b(?:proposal|return request|cancellation request)(?: (?:has been |was |is now )?| for [^.!?\n]+? (?:has been |was |is now ))(?:successfully )?(?:created|submitted|staged)\b", text, re.I)
-                                and re.search(r"cancel|return", text, re.I))
+                                and re.search(r"please confirm|(?:could|can|would) you confirm|do you (?:confirm|want)|would you like me to (?:proceed|cancel|return|exchange)|\b(?:proposal|return request|cancellation request|exchange request)(?: (?:has been |was |is now )?| for [^.!?\n]+? (?:has been |was |is now ))(?:successfully )?(?:created|submitted|staged)\b", text, re.I)
+                                and re.search(r"cancel|return|exchange", text, re.I))
             explicit_confirmation = (isinstance(text, str) and re.search(
-                r"please confirm (?:if|whether) you (?:would like|want|wish)|would you like me to (?:proceed|cancel|return)|do you want me to",
+                r"please confirm (?:if|whether) you (?:would like|want|wish)|would you like me to (?:proceed|cancel|return|exchange)|do you want me to",
                 text, re.I))
             kind = ("empty" if not text else "proposal" if proposal_missing and explicit_confirmation else
                     "information" if _requests_information(text) else "proposal" if proposal_missing else None)

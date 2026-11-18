@@ -37,3 +37,10 @@
 - README, `docs/demos.md`, `docs/interview.md`, contribution and acceptance records explain existing behavior, negative metrics, source ownership and unresolved limits.
 - `examples/confirmation_change.py` is a direct real-business guard demonstration, with no model or benchmark task. Real-model CLI cancellation and policy explanation traces are separately labeled; no runtime, scorer, prompt, schemas, frozen data or upstream business code changed for T8.
 - T8 reuses the authorized local environment and model; no downloads or additional dependencies. Original-code license selection remains pending, with upstream MIT notices retained.
+
+## 2026-11-18: delivered-order exchange and versioned task expansion
+
+- User-authorized extension beyond the original eight business tools: expose the already-cached `exchange_delivered_order_items` method. No downloads, dependencies, raw upstream data or upstream method bodies changed. Nine business tools plus `ask_user` are now available.
+- Application adapters add paired variant/price/payment display, existing confirmation and receipt protection, exchange outcome context, and private user preferences. Upstream exchange records a request and signed difference; it does not settle payment/refund or mutate gift-card balances.
+- `configs/exchange-evaluation.json` selects seven additional source tasks (0, 1, 75, 77, 80, 93, 106) on top of the reviewed 20-task version. New derived files live under `data/versions/t3-exchange-v1`; historical files remain intact. These are 27 local derived records, not 80 completed tasks or official benchmark results.
+- The final-state checker independently validates paired variants and price difference, unchanged unrelated data and payment history. User consent constraints are private and checked against visible proposal facts, not passed to the agent as answer IDs.

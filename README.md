@@ -1,6 +1,6 @@
 # RetailFlow
 
-本地零售业务 Agent，基于 LangGraph、Ollama 和固定版 τ2-bench retail 模拟环境，支持订单查询、取消与退货。
+本地零售业务 Agent，基于 LangGraph、Ollama 和固定版 τ2-bench retail 模拟环境，支持订单查询、取消、退货与已送达订单的换货申请。
 
 [业务演示](#业务演示) · [主要改造](#主要改造) · [执行流程](#执行流程) · [快速开始](#快速开始) · [Langfuse 可观测性](#langfuse-可观测性) · [设计说明](docs/architecture.md)
 
@@ -36,6 +36,8 @@ DEMO_THREAD="cancel-$(date +%Y%m%d-%H%M%S)"
 .venv/bin/python examples/confirmation_change.py
 ```
 
+换货时，Agent 需要先查询原订单和同款商品规格；提案会展示旧／新商品、规格、价差与支付方式。用户确认后记录 `exchange requested`。换货提交后的回执由应用根据实际状态生成，原始模型回答保留在轨迹中。此本地模拟环境不实际结算差价、不发货；同一订单的退货或换货只能申请一次，需先收集完整需求。
+
 [完整演示与结果检查](docs/demos.md)。实际模型可能选错工具或提前结束，业务是否完成要看工具结果与最终状态，不能只看回复文字。
 
 ## 主要改造
@@ -69,7 +71,7 @@ flowchart LR
     M --> A[答复或停止]
 ```
 
-模型可见八个业务工具及一个 `ask_user`。`confirm_action` 不向模型暴露；写入结果未知时不自动重试写操作。恢复与重复执行保护仅针对本地事务和已测试路径，不是分布式 exactly-once 保证。
+模型可见九个业务工具及一个 `ask_user`。`confirm_action` 不向模型暴露；写入结果未知时不自动重试写操作。恢复与重复执行保护仅针对本地事务和已测试路径，不是分布式 exactly-once 保证。
 
 ## 快速开始
 

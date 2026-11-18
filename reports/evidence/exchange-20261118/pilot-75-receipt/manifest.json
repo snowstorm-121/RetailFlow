@@ -1,0 +1,817 @@
+{
+  "version": "t6-v1",
+  "model": {
+    "name": "qwen3:4b-instruct-2507-q4_K_M",
+    "model": "qwen3:4b-instruct-2507-q4_K_M",
+    "modified_at": "2026-10-14T18:32:43.259428376+08:00",
+    "size": 2497293803,
+    "digest": "0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0",
+    "details": {
+      "parent_model": "",
+      "format": "gguf",
+      "family": "qwen3",
+      "families": [
+        "qwen3"
+      ],
+      "parameter_size": "4.0B",
+      "quantization_level": "Q4_K_M"
+    }
+  },
+  "ollama_runtime": {
+    "version": "0.15.6"
+  },
+  "execution": {
+    "base_url": "http://127.0.0.1:11434",
+    "model": "qwen3:4b-instruct-2507-q4_K_M",
+    "temperature": 0,
+    "seed": 42,
+    "num_ctx": 8192,
+    "num_predict": 768,
+    "request_timeout_seconds": 120,
+    "max_model_calls_per_turn": 12,
+    "max_model_calls_per_episode": 24,
+    "max_user_turns_per_episode": 10,
+    "max_episode_seconds": 900,
+    "concurrency": 1,
+    "return_receipt_response": true,
+    "isolated_information_repair": true,
+    "isolated_proposal_repair": true,
+    "cancel_goal_tracking": true,
+    "cancel_goal_activation": "explicit_all_pending"
+  },
+  "variants": {
+    "B0": {
+      "structured_context": false,
+      "max_retry_per_call": 0
+    },
+    "B1": {
+      "structured_context": false,
+      "max_retry_per_call": 1
+    },
+    "B2": {
+      "structured_context": true,
+      "max_retry_per_call": 1
+    }
+  },
+  "config": {
+    "dataset_version": "t3-exchange-v1",
+    "upstream_commit": "2174a603f6d014ef94473ffa95957f6ce27100db",
+    "source_root": "vendor/tau_retail/source",
+    "seed": 42,
+    "selected_tasks": [
+      {
+        "id": "2",
+        "category": "legal_write",
+        "user_id": "yusuf_rossi_9620",
+        "opening": "How many T-shirt options are available? I also want to return the vacuum cleaner, headphones, and smart watch I received.",
+        "field_responses": {
+          "order": "I don't remember the order number.",
+          "return_items": "The vacuum cleaner, headphones, and smart watch.",
+          "refund_method": "The original payment method."
+        }
+      },
+      {
+        "id": "24",
+        "category": "multiturn_change",
+        "user_id": "sofia_hernandez_5364",
+        "opening": "I'd like to cancel the grill I ordered.",
+        "field_responses": {
+          "order": "I don't remember its order number."
+        },
+        "proposal_rules": [
+          {
+            "tool": "cancel_pending_order",
+            "decision": "decline",
+            "reply": "Actually, keep the grill. Which two T-shirts did I order in another order, and what materials are they?"
+          }
+        ]
+      },
+      {
+        "id": "48",
+        "category": "legal_write",
+        "user_id": "daiki_johnson_9523",
+        "opening": "The air purifier I received doesn't work well. Please return it to my original payment method. At the end, tell me whether I could return the vacuum cleaner too; don't process that one yet.",
+        "field_responses": {
+          "order": "I don't remember the order number.",
+          "return_items": "Just the air purifier.",
+          "refund_method": "The original payment method."
+        }
+      },
+      {
+        "id": "50",
+        "category": "refusal_handoff",
+        "user_id": "chen_smith_8425",
+        "opening": "Please undo an order I cancelled and make sure it gets delivered as soon as possible.",
+        "field_responses": {
+          "order": "I don't remember the order number."
+        }
+      },
+      {
+        "id": "69",
+        "category": "legal_write",
+        "user_id": "emma_smith_8564",
+        "opening": "I received a laptop I ordered around April 2023 and found a better deal elsewhere. Can I return it for a full refund? If it hasn't arrived yet, please cancel it.",
+        "field_responses": {
+          "order": "I don't remember the number.",
+          "cancel_reason": "I no longer need it."
+        }
+      },
+      {
+        "id": "73",
+        "category": "legal_write",
+        "user_id": "fatima_wilson_7472",
+        "opening": "Please return everything I just bought except the coffee machine.",
+        "field_responses": {
+          "order": "I don't remember the number.",
+          "return_items": "Everything from that order except the coffee machine.",
+          "refund_method": "The original payment method."
+        }
+      },
+      {
+        "id": "81",
+        "category": "legal_write",
+        "user_id": "james_kim_7213",
+        "opening": "I no longer need the hiking boots, watch, keyboard, charger, jacket, or running shoes. If you can't cancel only those items, cancel the whole orders.",
+        "field_responses": {
+          "order": "I don't remember the order numbers.",
+          "cancel_reason": "I no longer need them."
+        }
+      },
+      {
+        "id": "92",
+        "category": "multiturn_change",
+        "user_id": "mei_ahmed_4909",
+        "opening": "I'm unhappy with the two skateboards I bought. Please return them and refund my credit card.",
+        "field_responses": {
+          "order": "I don't remember the order numbers.",
+          "return_items": "The two skateboards; I may have more to add before I confirm.",
+          "refund_method": "My credit card."
+        },
+        "proposal_rules": [
+          {
+            "tool": "return_delivered_order_items",
+            "order_id": "#W7553978",
+            "unless_item_name": "Smart Watch",
+            "decision": "revise",
+            "reply": "Wait, add the smart watch to this return. I also want to return the e-reader from my other order."
+          }
+        ]
+      },
+      {
+        "id": "113",
+        "category": "legal_write",
+        "user_id": "yara_muller_8652",
+        "opening": "I want to cancel all of my pending orders.",
+        "field_responses": {
+          "order": "I don't remember the order numbers.",
+          "cancel_reason": "I ordered them by mistake."
+        }
+      },
+      {
+        "id": "51",
+        "category": "legal_write",
+        "user_id": "sofia_li_9219",
+        "opening": "I want to return the digital camera I received. I think its order is #W8855135, but I'm not certain. Please refund the original payment method.",
+        "field_responses": {
+          "order": "I only remember #W8855135, but please check whether it is the camera order.",
+          "return_items": "Just the digital camera.",
+          "refund_method": "The original payment method."
+        }
+      },
+      {
+        "id": "53",
+        "category": "legal_write",
+        "user_id": "sofia_li_9219",
+        "opening": "The bicycle I received was damaged in delivery. I'd like a refund to my original credit card.",
+        "field_responses": {
+          "order": "I don't remember the number.",
+          "return_items": "The bicycle.",
+          "refund_method": "My original credit card."
+        }
+      },
+      {
+        "id": "68",
+        "category": "query",
+        "user_id": "noah_ito_3850",
+        "opening": "How much did I pay for my most recent order? I don't remember when I placed it.",
+        "field_responses": {
+          "identity": [
+            "I'm Noah Ito, ZIP 98178.",
+            "Sorry, my ZIP is 98187."
+          ],
+          "order": "I don't know the order number."
+        }
+      },
+      {
+        "id": "108",
+        "category": "legal_write",
+        "user_id": "yusuf_gonzalez_8900",
+        "opening": "In a recently delivered order, please return everything except the tablet, including the e-reader. How much money would I get back?",
+        "field_responses": {
+          "order": "I don't remember the number.",
+          "return_items": "Everything except the tablet.",
+          "refund_method": "The original payment method."
+        }
+      },
+      {
+        "id": "10",
+        "category": "refusal_handoff",
+        "user_id": "mia_garcia_4516",
+        "opening": "I want to return everything in both my orders, refunding each order to the other order's payment method. If that is not allowed, please connect me with a human representative.",
+        "field_responses": {
+          "order": "I have two orders. Please check both.",
+          "return_items": "Everything in both orders.",
+          "refund_method": "Use each order's other payment method, not its original method. If that is not allowed, transfer me to a human."
+        }
+      },
+      {
+        "id": "88",
+        "category": "legal_write",
+        "user_id": "daiki_silva_2903",
+        "opening": "Can you change my bookshelf to 4 feet tall, keeping its material and color? If that option is unavailable, cancel the whole order and I will buy again.",
+        "field_responses": {
+          "order": "Please find the order containing my bookshelf.",
+          "cancel_reason": "I ordered it by mistake."
+        }
+      },
+      {
+        "id": "89",
+        "category": "legal_write",
+        "user_id": "raj_santos_9079",
+        "opening": "What is the cheapest available mechanical keyboard and what are its options? If it costs less than $200, exchange my current one for it. Otherwise, return my current keyboard.",
+        "field_responses": {
+          "order": "Please find my mechanical keyboard order.",
+          "return_items": "Just the mechanical keyboard.",
+          "refund_method": "The original payment method."
+        }
+      },
+      {
+        "id": "90",
+        "category": "legal_write",
+        "user_id": "emma_kovacs_9839",
+        "opening": "Does the digital camera I just bought have 10x zoom? If not, change it to 10x without changing other options. If that option is unavailable, cancel the order because I no longer need it. If it is available but costs more than $3000, cancel because I ordered by mistake.",
+        "field_responses": {
+          "order": "Please find my digital camera order.",
+          "cancel_reason": "If the 10x version is unavailable, no longer needed; if it is available but over $3000, ordered by mistake."
+        }
+      },
+      {
+        "id": "11",
+        "category": "legal_write",
+        "user_id": "mia_garcia_4516",
+        "opening": "I want to return everything in both my orders and refund each order to the other order's payment method. If that is not permitted, explain why and return everything to the original payment methods instead.",
+        "field_responses": {
+          "order": "Both of my orders.",
+          "return_items": "Everything in both orders.",
+          "refund_method": "I prefer swapping the two methods; if that is not permitted, use each order's original payment method."
+        }
+      },
+      {
+        "id": "13",
+        "category": "legal_write",
+        "user_id": "mia_garcia_4516",
+        "opening": "I just got into gaming. Please cancel or return everything I ordered that is not associated with gaming. I prefer PayPal for the refund, but a credit card is acceptable if PayPal is not allowed.",
+        "field_responses": {
+          "order": "Please check both my orders.",
+          "return_items": "Everything not associated with gaming.",
+          "refund_method": "PayPal if allowed, otherwise credit card."
+        }
+      },
+      {
+        "id": "14",
+        "category": "legal_write",
+        "user_id": "mia_garcia_4516",
+        "opening": "I quit gaming. Please cancel or return everything I ordered that is associated with gaming. Refund to the original payment methods.",
+        "field_responses": {
+          "order": "Please check both my orders.",
+          "return_items": "Everything associated with gaming.",
+          "refund_method": "The original payment methods."
+        }
+      },
+      {
+        "id": "0",
+        "category": "legal_write",
+        "user_id": "yusuf_rossi_9620",
+        "opening": "I received order #W2378156. Exchange my mechanical keyboard for clicky switches, keeping RGB backlight and full size; if no such variant is available, no backlight is acceptable. Also exchange my smart thermostat from Apple HomeKit to Google Home compatibility.",
+        "field_responses": {
+          "order": "Please find the order containing those items.",
+          "exchange_items": "Mechanical Keyboard, Smart Thermostat",
+          "exchange_options": "I received order #W2378156. Exchange my mechanical keyboard for clicky switches, keeping RGB backlight and full size; if no such variant is available, no backlight is acceptable. Also exchange my smart thermostat from Apple HomeKit to Google Home compatibility.",
+          "payment_method": "The original payment method."
+        }
+      },
+      {
+        "id": "1",
+        "category": "legal_write",
+        "user_id": "yusuf_rossi_9620",
+        "opening": "I received order #W2378156. Exchange my mechanical keyboard for clicky switches while keeping RGB backlight and full size. If that variant is unavailable, leave the keyboard and only exchange my smart thermostat to Google Home compatibility.",
+        "field_responses": {
+          "order": "Please find the order containing those items.",
+          "exchange_items": "Smart Thermostat",
+          "exchange_options": "I received order #W2378156. Exchange my mechanical keyboard for clicky switches while keeping RGB backlight and full size. If that variant is unavailable, leave the keyboard and only exchange my smart thermostat to Google Home compatibility.",
+          "payment_method": "The original payment method."
+        }
+      },
+      {
+        "id": "75",
+        "category": "legal_write",
+        "user_id": "liam_moore_4057",
+        "opening": "In #W6908222, exchange my blue wireless earbuds with 8-hour battery and IPX4 resistance for black earbuds with 4-hour battery and no water resistance.",
+        "field_responses": {
+          "order": "Please find the order containing those items.",
+          "exchange_items": "Wireless Earbuds",
+          "exchange_options": "In #W6908222, exchange my blue wireless earbuds with 8-hour battery and IPX4 resistance for black earbuds with 4-hour battery and no water resistance.",
+          "payment_method": "The original payment method."
+        }
+      },
+      {
+        "id": "77",
+        "category": "legal_write",
+        "user_id": "ivan_johnson_6036",
+        "opening": "I tried a little of the perfume I ordered and like it. Please exchange it for the largest size available, keeping the same perfume.",
+        "field_responses": {
+          "order": "Please find the order containing those items.",
+          "exchange_items": "Perfume",
+          "exchange_options": "I tried a little of the perfume I ordered and like it. Please exchange it for the largest size available, keeping the same perfume.",
+          "payment_method": "The original payment method."
+        }
+      },
+      {
+        "id": "80",
+        "category": "legal_write",
+        "user_id": "amelia_gonzalez_4098",
+        "opening": "In #W7209932, exchange my blue small polyester V-neck T-shirt for a red XXL cotton crew-neck T-shirt. Use my gift card for the price difference.",
+        "field_responses": {
+          "order": "Please find the order containing those items.",
+          "exchange_items": "T-Shirt",
+          "exchange_options": "In #W7209932, exchange my blue small polyester V-neck T-shirt for a red XXL cotton crew-neck T-shirt. Use my gift card for the price difference.",
+          "payment_method": "My gift card."
+        }
+      },
+      {
+        "id": "93",
+        "category": "legal_write",
+        "user_id": "lei_wilson_4541",
+        "opening": "I received a laptop and want to exchange it for one with an i7 processor, 8GB RAM and 1TB SSD.",
+        "field_responses": {
+          "order": "Please find the order containing those items.",
+          "exchange_items": "The 15-inch laptop with 32GB RAM.",
+          "exchange_options": "I received a laptop and want to exchange it for one with an i7 processor, 8GB RAM and 1TB SSD.",
+          "payment_method": "The original payment method."
+        }
+      },
+      {
+        "id": "106",
+        "category": "legal_write",
+        "user_id": "sofia_thomas_1518",
+        "opening": "The T-shirt I received is too large. Exchange it for one size smaller. Keep it cotton, and I prefer black if available.",
+        "field_responses": {
+          "order": "Please find the order containing those items.",
+          "exchange_items": "T-Shirt",
+          "exchange_options": "The T-shirt I received is too large. Exchange it for one size smaller. Keep it cotton, and I prefer black if available.",
+          "payment_method": "The original payment method."
+        }
+      }
+    ],
+    "execution": {
+      "base_url": "http://127.0.0.1:11434",
+      "model": "qwen3:4b-instruct-2507-q4_K_M",
+      "temperature": 0,
+      "seed": 42,
+      "num_ctx": 8192,
+      "num_predict": 768,
+      "request_timeout_seconds": 120,
+      "max_model_calls_per_turn": 12,
+      "max_model_calls_per_episode": 24,
+      "max_user_turns_per_episode": 10,
+      "max_episode_seconds": 900,
+      "concurrency": 1,
+      "return_receipt_response": true,
+      "isolated_information_repair": true,
+      "isolated_proposal_repair": true,
+      "cancel_goal_tracking": true,
+      "cancel_goal_activation": "explicit_all_pending"
+    },
+    "expected_model_digest": "0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0",
+    "pilot_task_ids": [
+      "tau-retail-2",
+      "tau-retail-24",
+      "tau-retail-48",
+      "tau-retail-50",
+      "tau-retail-69"
+    ],
+    "fault_overrides": {
+      "tau-retail-2": {
+        "tool": "get_product_details",
+        "occurrence": 1
+      },
+      "tau-retail-48": {
+        "tool": "get_order_details",
+        "occurrence": 1
+      },
+      "tau-retail-113": {
+        "tool": "get_user_details",
+        "occurrence": 1
+      }
+    },
+    "user_consent": {
+      "tau-retail-2": {
+        "tool": "return_delivered_order_items",
+        "include": [
+          "Vacuum Cleaner",
+          "Headphones",
+          "Smart Watch"
+        ]
+      },
+      "tau-retail-24": {
+        "tool": "cancel_pending_order",
+        "include": [
+          "Grill"
+        ]
+      },
+      "tau-retail-48": {
+        "tool": "return_delivered_order_items",
+        "include": [
+          "Air Purifier"
+        ]
+      },
+      "tau-retail-50": {
+        "tools": []
+      },
+      "tau-retail-69": {
+        "tools": [
+          "return_delivered_order_items",
+          "cancel_pending_order"
+        ],
+        "include": [
+          "Laptop"
+        ],
+        "cancel_reason": "no longer needed"
+      },
+      "tau-retail-73": {
+        "tool": "return_delivered_order_items",
+        "all": true,
+        "exclude": [
+          "Espresso Machine"
+        ]
+      },
+      "tau-retail-81": {
+        "tool": "cancel_pending_order",
+        "include": [
+          "Hiking Boots",
+          "Watch",
+          "Smart Watch",
+          "Keyboard",
+          "Charger",
+          "Jacket",
+          "Running Shoes"
+        ],
+        "cancel_reason": "no longer needed"
+      },
+      "tau-retail-92": {
+        "tool": "return_delivered_order_items",
+        "include": [
+          "Skateboard",
+          "Smart Watch",
+          "E-Reader"
+        ]
+      },
+      "tau-retail-113": {
+        "tool": "cancel_pending_order",
+        "all": true,
+        "cancel_reason": "ordered by mistake"
+      },
+      "tau-retail-51": {
+        "tool": "return_delivered_order_items",
+        "include": [
+          "Digital Camera"
+        ]
+      },
+      "tau-retail-53": {
+        "tool": "return_delivered_order_items",
+        "include": [
+          "Bicycle"
+        ]
+      },
+      "tau-retail-68": {
+        "tools": []
+      },
+      "tau-retail-108": {
+        "tool": "return_delivered_order_items",
+        "all": true,
+        "exclude": [
+          "Tablet"
+        ]
+      },
+      "tau-retail-10": {
+        "tools": []
+      },
+      "tau-retail-88": {
+        "tool": "cancel_pending_order",
+        "include": [
+          "Bookshelf"
+        ],
+        "cancel_reason": "ordered by mistake"
+      },
+      "tau-retail-89": {
+        "tool": "return_delivered_order_items",
+        "include": [
+          "Mechanical Keyboard"
+        ]
+      },
+      "tau-retail-90": {
+        "tool": "cancel_pending_order",
+        "include": [
+          "Digital Camera"
+        ],
+        "cancel_reason": "ordered by mistake"
+      },
+      "tau-retail-11": {
+        "tool": "return_delivered_order_items",
+        "all": true
+      },
+      "tau-retail-13": {
+        "tool": "return_delivered_order_items",
+        "all": true,
+        "exclude": [
+          "Mechanical Keyboard",
+          "Gaming Mouse"
+        ]
+      },
+      "tau-retail-14": {
+        "tool": "return_delivered_order_items",
+        "include": [
+          "Mechanical Keyboard",
+          "Gaming Mouse"
+        ]
+      },
+      "tau-retail-0": {
+        "tool": "exchange_delivered_order_items",
+        "include": [
+          "Mechanical Keyboard",
+          "Smart Thermostat"
+        ],
+        "exchange_required_names": [
+          "Mechanical Keyboard",
+          "Smart Thermostat"
+        ],
+        "exchange_options": {
+          "Mechanical Keyboard": {
+            "switch type": "clicky",
+            "size": "full size",
+            "backlight": "none"
+          },
+          "Smart Thermostat": {
+            "compatibility": "Google Assistant"
+          }
+        },
+        "exchange_old_options": {}
+      },
+      "tau-retail-1": {
+        "tool": "exchange_delivered_order_items",
+        "include": [
+          "Smart Thermostat"
+        ],
+        "exchange_required_names": [
+          "Smart Thermostat"
+        ],
+        "exchange_options": {
+          "Smart Thermostat": {
+            "compatibility": "Google Assistant"
+          }
+        },
+        "exchange_old_options": {}
+      },
+      "tau-retail-75": {
+        "tool": "exchange_delivered_order_items",
+        "include": [
+          "Wireless Earbuds"
+        ],
+        "exchange_required_names": [
+          "Wireless Earbuds"
+        ],
+        "exchange_options": {
+          "Wireless Earbuds": {
+            "color": "black",
+            "battery life": "4 hours",
+            "water resistance": "not resistant"
+          }
+        },
+        "exchange_old_options": {}
+      },
+      "tau-retail-77": {
+        "tool": "exchange_delivered_order_items",
+        "include": [
+          "Perfume"
+        ],
+        "exchange_required_names": [
+          "Perfume"
+        ],
+        "exchange_options": {
+          "Perfume": {
+            "scent family": "woody",
+            "gender": "men",
+            "size": "100ml"
+          }
+        },
+        "exchange_old_options": {}
+      },
+      "tau-retail-80": {
+        "tool": "exchange_delivered_order_items",
+        "include": [
+          "T-Shirt"
+        ],
+        "exchange_required_names": [
+          "T-Shirt"
+        ],
+        "exchange_options": {
+          "T-Shirt": {
+            "color": "red",
+            "size": "XXL",
+            "material": "cotton",
+            "style": "crew neck"
+          }
+        },
+        "exchange_old_options": {},
+        "exchange_payment_source": "gift_card"
+      },
+      "tau-retail-93": {
+        "tool": "exchange_delivered_order_items",
+        "include": [
+          "Laptop"
+        ],
+        "exchange_required_names": [
+          "Laptop"
+        ],
+        "exchange_options": {
+          "Laptop": {
+            "processor": "i7",
+            "ram": "8GB",
+            "storage": "1TB SSD"
+          }
+        },
+        "exchange_old_options": {
+          "Laptop": {
+            "screen size": "15-inch",
+            "ram": "32GB"
+          }
+        }
+      },
+      "tau-retail-106": {
+        "tool": "exchange_delivered_order_items",
+        "include": [
+          "T-Shirt"
+        ],
+        "exchange_required_names": [
+          "T-Shirt"
+        ],
+        "exchange_options": {
+          "T-Shirt": {
+            "size": "XL",
+            "material": "cotton",
+            "color": "black"
+          }
+        },
+        "exchange_old_options": {}
+      }
+    },
+    "communication_review": {
+      "version": "t6-v1",
+      "method": "assistant-assisted offline semantic review; no model-judge API",
+      "criteria": [
+        "All requested facts or actions are communicated accurately.",
+        "No unsupported success claim or completed-refund claim.",
+        "Partial completion, refusal, or handoff is explained truthfully.",
+        "The review cannot override failed state, confirmation, or side-effect checks."
+      ]
+    },
+    "experiment_version": "exchange-20261118",
+    "evaluation_scope": "Dev development; previously observed Test may only be used as seen-task regression, never an unseen score.",
+    "user_script_overrides": {
+      "tau-retail-24": {
+        "cancel_reason": "I ordered it by mistake."
+      },
+      "tau-retail-48": {
+        "identity": "My name is Daiki Johnson, ZIP 80273."
+      },
+      "tau-retail-69": {
+        "identity": "My name is Emma Smith, ZIP 10192."
+      }
+    },
+    "script_revision_notes": {
+      "24": "Upstream user instructions permit making up a cancellation reason. Register one fixed reply, only when asked.",
+      "48/69": "Expand upstream username identity to the name and ZIP verified from its source database profile, only when identity is requested.",
+      "73": "Coffee machine in the user request refers to the sole Espresso Machine in this order. Correct consent exclusion; keep gold item IDs unchanged."
+    },
+    "budget_revision_note": "Single-turn limit 6 -> 12: identity lookup + profile + three order reads + proposal already requires 6 native tool calls before the final answer; observed Dev48 stopped before its proposal. Episode cap remains 24 model calls / 10 user events / 900 seconds. Not a budget-matched comparison with historical runs.",
+    "revision_note": "Seven exchange adaptations after adding native exchange tools, consent and final-state checks. No claim of80 tasks or unseen Test. No model scores yet. Consent pins user preferences to the fixed catalogue: task0 RGB unavailable -> none; task77 largest woody men size100ml; task106 preferred black available. These are private user constraints, not model-visible target IDs.",
+    "output_root": "data/versions/t3-exchange-v1",
+    "dataset_root": "data/versions/t3-exchange-v1",
+    "additional_tools": [
+      "exchange_delivered_order_items"
+    ]
+  },
+  "python": "3.12.15 (main, Oct 14 2026, 00:55:37) [Clang 23.1.3 ]",
+  "dependencies": {
+    "langfuse": "5.2.0",
+    "xxhash": "4.0.2",
+    "opentelemetry-exporter-otlp-common": "0.66b2",
+    "langsmith": "0.14.11",
+    "opentelemetry-exporter-otlp-proto-common": "1.45.2",
+    "googleapis-common-protos": "1.76.0",
+    "packaging": "26.3",
+    "langgraph-checkpoint": "4.3.0",
+    "protobuf": "7.36.2",
+    "Pygments": "2.21.0",
+    "requests": "2.34.2",
+    "ollama": "0.6.3",
+    "websockets": "16.1.1",
+    "retailflow": "0.1.0",
+    "orjson": "3.13.0",
+    "zstandard": "0.25.0",
+    "ormsgpack": "1.13.0",
+    "opentelemetry-exporter-http-transport": "0.66b2",
+    "iniconfig": "2.3.1",
+    "httpcore": "1.0.9",
+    "uuid_utils": "0.18.0",
+    "opentelemetry-exporter-otlp-proto-http": "1.45.2",
+    "langgraph-prebuilt": "1.1.1",
+    "langgraph": "1.2.16",
+    "opentelemetry-semantic-conventions": "0.66b2",
+    "pluggy": "1.7.0",
+    "opentelemetry-api": "1.45.2",
+    "jsonpointer": "3.4",
+    "jsonpatch": "1.36",
+    "langchain-ollama": "1.1.0",
+    "pytest": "9.1.1",
+    "opentelemetry-proto": "1.45.2",
+    "urllib3": "2.8.0",
+    "h11": "0.16.0",
+    "sniffio": "1.3.1",
+    "pydantic_core": "2.50.1",
+    "PyYAML": "6.0.3",
+    "httpx2": "2.15.1",
+    "langchain-core": "1.6.12",
+    "truststore": "0.10.5",
+    "httpcore2": "2.15.1",
+    "langchain-protocol": "0.0.19",
+    "annotated-types": "0.8.0",
+    "wrapt": "2.5.2",
+    "typing-inspection": "0.4.4",
+    "distro": "1.9.0",
+    "requests-toolbelt": "1.0.0",
+    "opentelemetry-sdk": "1.45.2",
+    "certifi": "2026.10.19",
+    "httpx": "0.28.1",
+    "typing_extensions": "4.16.0",
+    "backoff": "2.2.1",
+    "pydantic": "2.14.1",
+    "charset-normalizer": "3.5.2",
+    "langgraph-sdk": "0.4.8",
+    "anyio": "4.15.1",
+    "tenacity": "9.2.1",
+    "idna": "3.20"
+  },
+  "prompt_sha256": "fe115ef0f1019e2c9e67d5e9de5bdd2bf3f85e7fdd9517f174727bd479acc171",
+  "tool_schema_sha256": "836a7965125d905ad83c7fda1f2090a15fb2141fc014431d20f708a126b036d4",
+  "file_hashes": {
+    "src/react_agent/__init__.py": "06a101ecbc06b81513e5f739a27300ad8f8201b8259fc6edb07cb94d8856867e",
+    "src/react_agent/context.py": "d0ef2f204fbdba20d4c818c33d97d7f50c9003f4f6860598f4cce694364cfd73",
+    "src/react_agent/graph.py": "84450ef49c1621caae483c0433198011d22fd92f6382095c020421006b024d05",
+    "src/react_agent/prompts.py": "754639c739d45b0453a80bc434b05b86136ae063b66e89db8bb4a43656bef6ac",
+    "src/react_agent/state.py": "ad1e6258af21012e477264fc7adbb3cfc7a975dbb9702ccf05c4e3f3b72f402c",
+    "src/react_agent/tools.py": "e9fc924f388d4a31b9c1e60a597b8f8db8cb3ec3fb40b3c54f060c75fb38b322",
+    "src/react_agent/utils.py": "67c5d97484a57ca5275d7daef19b3b9136676a5041c8ffca719a599f9de7c9c6",
+    "src/retailflow/__init__.py": "996fd92a9269299c58f5c21ea04ef4a48789c6a96f30165252f5566549b08cd4",
+    "src/retailflow/cancel_goals.py": "b0d11783134c70acd982c7988c2ccb2fbeb26b47fd769f0498aa997667cff76e",
+    "src/retailflow/cli.py": "f01dcfea6c8a0b62f070d753f5a08a63bd2072117f615d202a3833842b46acac",
+    "src/retailflow/context.py": "479ea56e6164aa04f5652181d67fddff02879f9cd85307a40e47b9f5dd29d8c2",
+    "src/retailflow/dataset.py": "3e6fbba0edf577cdc3038920e779b3f79168d862272d07975e90a94557158d6d",
+    "src/retailflow/environment.py": "4d5be64b58eb5b58aa4a9326af3c094397b3254d1dca65603daad499d29875e5",
+    "src/retailflow/evaluation.py": "a5bb642325d693a10338d5a5cc5c06d493be4db1c16f57c58c04262e164de7e2",
+    "src/retailflow/frozen.py": "46b22e058582fee60fa14fca30f753e3162c2a8462b7850e6f1de94d7e1a7c72",
+    "src/retailflow/observability.py": "65cbc3b8f49347d611d9c03c484df71c07c2bc16bcd0a2be321f21a018432bd9",
+    "src/retailflow/runtime.py": "d941efe7066fa2af5c72e7479a5469cd56aa9fb40c8a7e921ccd39006f34a527",
+    "src/retailflow/smoke.py": "89b46324bd060d8878c0c384e9da8ce8d77052b4fea058b88f784a5b3d318202",
+    "src/retailflow/storage.py": "f154afdcb66d96f19ad5ada906a38e3572ea2d8c85d91b33c1d454125c8ee52f",
+    "src/retailflow/tools.py": "506b888800f72cd2fb1e0913631e577674faed996d5b268c1e1572028a6f9bdb",
+    "src/retailflow/upstream/__init__.py": "6cceb02ee68d37c6549f30a7b7ebaf9d367a86165dc82b7d8a30d83bf3fe5b8e",
+    "src/retailflow/upstream/compat.py": "e48365daaa0f6ea8e0c1c5546e0451d1622862c41d4ad85f57dfe145fb732216",
+    "src/retailflow/upstream/data_model.py": "bac4cb8de94af0d226a9525e10ec873a4e0686c72a0fe3ec52bee47845689e73",
+    "src/retailflow/upstream/paths.py": "bef7e5d3f4cb5354b98be531f6fefc4611ea5d1589810b1f96b020c98e9bb3ec",
+    "src/retailflow/upstream/tools.py": "d337229e22088ee1c08956a6db9b6359de84d9c1ea606dce4b8c121b8b8180e8",
+    "src/retailflow/user_script.py": "a5ff5bba562cdd8c7759ea88c1730491fe9c01174cce09f56653dc162eff7596",
+    "uv.lock": "b6a95293dc294289fba6a2dfc8582be7c3aafd8cd967bb0221a8458480883a7b",
+    "configs/exchange-evaluation.json": "536d8a6d536e0d9e2052c84b6728ca79d441fedcc93dae50ad8923bed7be8dbe",
+    "data/versions/t3-exchange-v1/data/manifests/dataset.json": "67d8239c8ada9d94334e3306a99a0e1cb524b0919765b034a6cd9b4863e268ef",
+    "data/versions/t3-exchange-v1/data/manifests/sources.json": "9fd8e97c0d4893ac828e56362bcc778bc9d70c6bfaa1adbf1f85c879a24a473d",
+    "data/versions/t3-exchange-v1/data/derived/dev.jsonl": "19069996d472e3e43a8a1b8ea0d5a7d14dda45a40df73fec31cfecb3595a1b1a",
+    "data/versions/t3-exchange-v1/data/derived/test.jsonl": "811771da66bda69d2e9d3a7c5e4874fe26bc9bab022335c9243e29e2647c0be7"
+  },
+  "manifest_sha256": "714a1a8bd629b088f0bc49002e4847897383589343c925f4bcbb84ab2f70e7a0",
+  "assigned_task_ids": [
+    "tau-retail-75"
+  ],
+  "split": "dev",
+  "variant": "B2"
+}

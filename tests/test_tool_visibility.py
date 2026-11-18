@@ -10,7 +10,7 @@ from test_agent_loop import call, runtime
     ({}, set()),
     ({'user_id': 'u'}, set()),
     ({'user_id': 'u', 'target_order_status': 'pending'}, {'cancel_pending_order'}),
-    ({'user_id': 'u', 'target_order_status': 'delivered'}, {'return_delivered_order_items'}),
+    ({'user_id': 'u', 'target_order_status': 'delivered'}, {'return_delivered_order_items', 'exchange_delivered_order_items'}),
     ({'user_id': 'u', 'target_order_status': 'cancelled'}, set()),
     ({'user_id': 'u', 'target_order_status': 'return requested'}, set()),
 ])
@@ -19,7 +19,7 @@ def test_tool_visibility_preserves_discovery_and_limits_writes(session, writes):
 
     names = {t['function']['name'] for t in retail_tools_for_session(session)}
     assert {'ask_user', 'transfer_to_human_agents'} <= names
-    assert names & {'cancel_pending_order', 'return_delivered_order_items'} == writes
+    assert names & {'cancel_pending_order', 'return_delivered_order_items', 'exchange_delivered_order_items'} == writes
     if session.get('user_id'):
         assert {'get_user_details', 'get_order_details', 'get_product_details'} <= names
     else:

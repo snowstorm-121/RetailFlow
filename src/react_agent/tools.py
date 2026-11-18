@@ -28,7 +28,8 @@ def minutes_to_seconds(minutes: int) -> int:
 TOOLS = [add, lookup_route_minutes, minutes_to_seconds]
 
 
-ASK_USER_FIELDS = ["identity", "order", "cancel_reason", "return_items", "refund_method"]
+ASK_USER_FIELDS = ["identity", "order", "cancel_reason", "return_items", "refund_method",
+                   "exchange_items", "exchange_options", "payment_method"]
 
 
 RETAIL_DESCRIPTIONS = {
@@ -39,6 +40,7 @@ RETAIL_DESCRIPTIONS = {
     "get_product_details": "Read product details by exact product ID.",
     "cancel_pending_order": "Stage a cancellation proposal for the authenticated user's pending order. The first call does NOT cancel; it returns a proposal for the application to confirm. Preserve the leading # in the order ID. Reason must be 'ordered by mistake' or 'no longer needed'.",
     "return_delivered_order_items": "Stage a return proposal for selected item IDs in the authenticated user's delivered order. The first call does NOT return items; it creates an application confirmation proposal. Preserve the leading # in the order ID.",
+    "exchange_delivered_order_items": "Stage an exchange proposal for a delivered order. Pair each old item_id with a new_item_id of the SAME product, in matching list positions. Read available variants and choose an existing user payment method for the price difference. The application displays details and requires confirmation; no settlement occurs here.",
     "transfer_to_human_agents": "Mark a request for human handoff when it cannot be handled by these tools. No human is contacted here.",
 }
 
@@ -87,4 +89,6 @@ def retail_tools_for_session(session):
             session.get("target_order_status"))
         if write:
             names.add(write)
+        if session.get("target_order_status") == "delivered":
+            names.add("exchange_delivered_order_items")
     return [tool for tool in RETAIL_TOOLS if tool["function"]["name"] in names]

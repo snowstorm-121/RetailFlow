@@ -25,7 +25,29 @@ ALLOWED_TOOLS = {
     "get_order_details", "get_product_details", "cancel_pending_order",
     "return_delivered_order_items", "transfer_to_human_agents",
 }
-WRITE_TOOLS = {"cancel_pending_order", "return_delivered_order_items"}
+WRITE_TOOLS = {"cancel_pending_order", "return_delivered_order_items", "exchange_delivered_order_items"}
+
+
+def _exchange_check(args, db):
+    order = db["orders"][args["order_id"]]
+    ids, new_ids = args["item_ids"], args["new_item_ids"]
+    if order["status"] != "delivered" or not ids or len(ids) != len(new_ids) or (
+            Counter(ids) - Counter(item["item_id"] for item in order["items"])):
+        raise ValueError("Invalid exchange items/status")
+    difference = 0
+    for old_id, new_id in zip(ids, new_ids):
+        old = next(item for item in order["items"] if item["item_id"] == old_id)
+        new = db["products"][old["product_id"]]["variants"].get(new_id)
+        if not new or not new["available"]:
+            raise ValueError("Exchange variant unavailable or belongs to another product")
+        difference += new["price"] - old["price"]
+    difference = round(difference, 2)
+    method = db["users"][order["user_id"]]["payment_methods"].get(args["payment_method_id"])
+    if not method or (method["source"] == "gift_card" and method["balance"] < difference):
+        raise ValueError("Invalid exchange payment method/balance")
+    return {"order_id": args["order_id"], "status": "exchange requested", "exchange_items": sorted(ids),
+            "exchange_new_items": sorted(new_ids), "exchange_payment_method_id": args["payment_method_id"],
+            "exchange_price_difference": difference}
 
 
 def _json_bytes(value):
@@ -66,6 +88,8 @@ def check_final_state(task: dict, before: dict, after: dict, events: list[dict])
             failures.append("target_state_mismatch")
             continue
         allowed = {"status", "cancel_reason", "payment_history"} if expected["status"] == "cancelled" else {"status", "return_items", "return_payment_method_id"}
+        if expected["status"] == "exchange requested":
+            allowed = {"status", "exchange_items", "exchange_new_items", "exchange_payment_method_id", "exchange_price_difference"}
         if any(actual.get(key) != value for key, value in original.items() if key not in allowed) or set(actual) - set(original) - allowed:
             failures.append("target_extra_change")
         if expected["status"] == "cancelled":
@@ -115,6 +139,8 @@ def _make_task(source_task, chosen, split, db, db_hash):
             if order["status"] != "pending" or args["reason"] not in {"no longer needed", "ordered by mistake"}:
                 raise ValueError(f"task {source_task['id']}: invalid cancellation")
             writes.append({"order_id": args["order_id"], "status": "cancelled", "cancel_reason": args["reason"]})
+        elif action["name"] == "exchange_delivered_order_items":
+            writes.append(_exchange_check(args, db))
         else:
             user = db["users"][chosen["user_id"]]
             ids = [item["item_id"] for item in order["items"]]
@@ -180,6 +206,10 @@ def prepare_dataset(config: dict) -> dict:
     if len(by_id) != len(tasks):
         raise ValueError("duplicate upstream task IDs")
     chosen = config["selected_tasks"]
+    additional = set(config.get("additional_tools", []))
+    if additional - {"exchange_delivered_order_items"}:
+        raise ValueError("Unsupported dataset tool extension")
+    allowed_tools = ALLOWED_TOOLS | additional
     if len({entry["id"] for entry in chosen}) != len(chosen):
         raise ValueError("duplicate selected source IDs")
     selected = []
@@ -187,7 +217,7 @@ def prepare_dataset(config: dict) -> dict:
         task = by_id[entry["id"]]
         if entry["user_id"] not in db["users"]:
             raise ValueError(f"task {entry['id']}: missing user")
-        if not all(a["name"] in ALLOWED_TOOLS for a in task["evaluation_criteria"].get("actions") or []):
+        if not all(a["name"] in allowed_tools for a in task["evaluation_criteria"].get("actions") or []):
             raise ValueError(f"task {entry['id']}: unsupported reference action")
         upstream_split = "train" if entry["id"] in split_ids["train"] else "test"
         selected.append(_make_task(task, entry, upstream_split, db, db_hash))
@@ -201,7 +231,7 @@ def prepare_dataset(config: dict) -> dict:
         if task["id"] in selected_ids:
             continue
         names = {a["name"] for a in task["evaluation_criteria"].get("actions") or []}
-        excluded["unsupported_action" if names - ALLOWED_TOOLS else "not_selected_after_full_goal_review"] += 1
+        excluded["unsupported_action" if names - allowed_tools else "not_selected_after_full_goal_review"] += 1
     source_manifest = {
         "repository": "https://github.com/sierra-research/tau2-bench",
         "commit": config["upstream_commit"],
@@ -228,6 +258,9 @@ def prepare_dataset(config: dict) -> dict:
         "review_status": "assistant_source_and_static_checks_only; runtime_checker_pending_T3_T6",
     }
     files["data/manifests/dataset.json"] = _json_bytes(manifest)
+    if additional:
+        manifest["additional_tools"] = sorted(additional)
+        files["data/manifests/dataset.json"] = _json_bytes(manifest)
     for name, content in files.items():
         path = output / name
         if path.exists() and path.read_bytes() != content:
@@ -275,7 +308,8 @@ def validate_dataset(manifest_path: str) -> dict:
             if task["initial_state_ref"] != f"retail-db@{manifest['source_db_sha256']}":
                 errors.append(f"initial state mismatch: {task['task_id']}")
             script = task["script"]
-            allowed_fields = {"identity", "order", "cancel_reason", "return_items", "refund_method"}
+            allowed_fields = {"identity", "order", "cancel_reason", "return_items", "refund_method",
+                              "exchange_items", "exchange_options", "payment_method"}
             if (not task["initial_user_message"] or not script["field_responses"].get("identity")
                     or set(script["field_responses"]) - allowed_fields
                     or script["on_unknown"] != "script_unhandled" or script["max_user_turns"] < 1):
@@ -308,6 +342,14 @@ def validate_dataset(manifest_path: str) -> dict:
                     errors.append(f"invalid cancellation precondition: {task['task_id']}")
                 elif check["status"] == "return requested" and (order["status"] != "delivered" or not set(check["return_items"]) <= {i["item_id"] for i in order["items"]}):
                     errors.append(f"invalid return precondition: {task['task_id']}")
+                elif check["status"] == "exchange requested":
+                    try:
+                        action = next(a for a in source_task["evaluation_criteria"]["actions"]
+                                      if a["name"] == "exchange_delivered_order_items" and a["arguments"]["order_id"] == check["order_id"])
+                        if check != _exchange_check(action["arguments"], db):
+                            errors.append(f"exchange oracle mismatch: {task['task_id']}")
+                    except (StopIteration, ValueError, KeyError):
+                        errors.append(f"invalid exchange precondition: {task['task_id']}")
     ids = [t["task_id"] for t in tasks]
     if len(ids) != len(set(ids)):
         errors.append("duplicate task ID")

@@ -5,7 +5,7 @@ from copy import deepcopy
 
 def user_view(task: dict, field_responses: dict | None = None) -> dict:
     replies = field_responses or {}
-    if set(replies) - {"identity", "order", "cancel_reason", "return_items", "refund_method"}:
+    if set(replies) - {"identity", "order", "cancel_reason", "return_items", "refund_method", "exchange_items", "exchange_options", "payment_method"}:
         raise ValueError("Unsupported user reply field")
     spec = deepcopy({key: task[key] for key in ("initial_user_message", "user_private_facts", "script")})
     spec["script"]["field_responses"].update(deepcopy(replies))
@@ -22,7 +22,7 @@ class ScriptedUser:
     def answer(self, request: dict) -> str:
         replies = []
         for field in request["fields"]:
-            if field not in {"identity", "order", "cancel_reason", "return_items", "refund_method"}:
+            if field not in {"identity", "order", "cancel_reason", "return_items", "refund_method", "exchange_items", "exchange_options", "payment_method"}:
                 raise ValueError(f"script_unhandled: unsupported field {field}")
             value = self.spec["script"]["field_responses"].get(field)
             if not value:
@@ -70,6 +70,22 @@ class ScriptedUser:
                                   if item["name"].casefold() not in exclude
                                   and (not include or item["name"].casefold() in include))
             allowed &= sorted(args["item_ids"]) == expected_ids
+        if proposal["name"] == "exchange_delivered_order_items":
+            pairs = display.get("exchange_pairs", [])
+            allowed &= bool(pairs) and len(pairs) == len(args["item_ids"]) == len(args["new_item_ids"])
+            required = self.consent.get("exchange_required_names")
+            if required:
+                allowed &= names == {name.casefold() for name in required}
+            for pair in pairs:
+                expected = self.consent.get("exchange_options", {}).get(pair["name"], {})
+                old_expected = self.consent.get("exchange_old_options", {}).get(pair["name"], {})
+                allowed &= all(pair["new_options"].get(k) == v for k, v in expected.items())
+                allowed &= all(pair["old_options"].get(k) == v for k, v in old_expected.items())
+            payment_source = self.consent.get("exchange_payment_source")
+            if payment_source:
+                allowed &= display.get("payment_source") == payment_source
+            else:
+                allowed &= args["payment_method_id"] == display["original_payment_method_id"]
         reason = self.consent.get("cancel_reason")
         if reason and proposal["name"] == "cancel_pending_order":
             allowed &= args["reason"] == reason
