@@ -73,7 +73,7 @@ async def chat(thread_id: str, config_path: Path, message: str | None = None) ->
         pending = session.get("pending_action")
         if pending:
             print(f"Pending {pending['name']} with {json.dumps(pending['args'], ensure_ascii=False)}")
-            if pending['name'] == 'exchange_delivered_order_items':
+            if pending['name'] in {'exchange_delivered_order_items', 'modify_pending_order_items'}:
                 print("Exchange details: " + json.dumps(pending['display'], ensure_ascii=False))
             try:
                 choice = input("Confirm this exact pending action? Type yes or no: ").strip().lower()

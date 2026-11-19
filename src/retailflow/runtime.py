@@ -30,6 +30,7 @@ Use get_user_details to list orders, then get_order_details to inspect them. Sea
 Preserve the leading # in every order ID. Read order details before proposing a write.
 CANCEL: status pending is eligible. Cancel the whole order, not individual items. Ask the customer for the reason if missing: 'ordered by mistake' or 'no longer needed'. Never guess a reason. Call cancel_pending_order to create a proposal.
 RETURN: status delivered is eligible for return. Select the requested item_ids from order details. Ask for refund_method if missing. Use the original payment_method_id or an existing gift card. Call return_delivered_order_items to create a proposal. After confirmation the status becomes return requested; a second return or amendment for that order is not allowed. The policy expects return instructions by email; this local environment sends no real email. A return request is not a settled refund; do not promise an unsupported return refund date.
+MODIFY: only pending orders; call modify_pending_order_items for available SAME-product replacements, pairing old/new IDs. Collect all changes first; item modification is allowed once and status becomes pending (item modified). Compute new total minus old total. A POSITIVE difference is owed and requires sufficient gift-card balance. A NEGATIVE difference is a refund: gift-card balance increases and need not cover the refund. Price differences are recorded in local payment history; gift-card balance is updated. No real payment is sent. Use exchange_items/exchange_options/payment_method to request missing preferences. Use calculate for monetary totals.
 EXCHANGE: only delivered orders. Read the order and product variants. Exchange to available variants of the SAME product; pair old and new item IDs in the same list positions. Collect all exchanges for that order before proposing: return or exchange is allowed only once. Use an existing user payment method for the difference; gift card must cover a positive difference. Ask for missing item preferences or payment_method. Call exchange_delivered_order_items to create a proposal. After confirmation the status is exchange requested, not a completed shipment or settled charge/refund. Positive price difference is owed; negative difference is a refund due; this local tool does not settle either or change gift-card balance.
 The first write-tool call creates a proposal without changing the order. The application obtains confirmation. Never ask for write confirmation in text, claim a proposal exists before a tool result, or claim a proposal is a completed operation.
 Credit card and PayPal cancellation refunds take 5 to 7 business days; do not claim those have already settled. Gift-card cancellation refunds are credited immediately to the existing gift-card balance, as recorded in Application outcome.
@@ -151,6 +152,9 @@ class RetailRuntime:
                             "payment_method_id": order["return_payment_method_id"], "refund_status": "not_settled",
                             "additional_return_allowed": False,
                             "instructions": "The retail policy expects return instructions by email; this local environment sends no real email."}
+                    elif order.get("status") == "pending (item modified)":
+                        summary["modification_details"] = {"items": order["items"],
+                            "simulated_payment": order["payment_history"][-1], "real_payment_sent": False}
                     elif order.get("status") == "exchange requested":
                         summary["exchange_details"] = {key: order[key] for key in (
                             "exchange_items", "exchange_new_items", "exchange_payment_method_id", "exchange_price_difference")}
@@ -211,7 +215,7 @@ class RetailRuntime:
                     text = request["question"]
                 elif status == "needs_confirmation":
                     text = f"Confirm {request['name']} with {json.dumps(request['args'], ensure_ascii=False)}?"
-                    if request['name'] == 'exchange_delivered_order_items':
+                    if request['name'] in {'exchange_delivered_order_items', 'modify_pending_order_items'}:
                         text += " Exchange details: " + json.dumps(request['display'], ensure_ascii=False)
                 elif status == "refused":
                     text = json.loads(messages[-1].content).get("message", "The business policy refused this action.")

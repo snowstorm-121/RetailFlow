@@ -160,7 +160,7 @@ def _tool_stats(messages):
                     legal += int(set(args) == {"fields", "question"} and isinstance(args["question"], str)
                                  and isinstance(args["fields"], list) and all(isinstance(f, str) for f in args["fields"])
                                  and bool(args["question"]) and bool(args["fields"])
-                                 and all(f in {"identity", "order", "cancel_reason", "return_items", "refund_method"} for f in args["fields"])
+                                 and all(f in {"identity", "order", "cancel_reason", "return_items", "refund_method", "exchange_items", "exchange_options", "payment_method"} for f in args["fields"])
                                  and len(set(args["fields"])) == len(args["fields"]))
                 elif name == "update_cancel_goal":
                     legal += int(bool(resolve_goal_references(args, customer_messages))
@@ -230,7 +230,11 @@ async def evaluate_episode(task: dict, variant: str, config: dict) -> dict:
                 event = {"kind": "message", "text": user.answer(result["request"])}
             elif status == "needs_confirmation":
                 proposal = result["request"]
+                previous_rules = set(user.used_rules)
                 decision, followup = user.decide(proposal)
+                if user.used_rules - previous_rules:
+                    events.append({"type": "user_revision", "rule_indices": sorted(user.used_rules - previous_rules),
+                                   "proposal_id": proposal["proposal_id"]})
                 if decision:
                     accepted[proposal["proposal_id"]] = deepcopy(proposal)
                 event = {"kind": "confirmation", "proposal_id": proposal["proposal_id"], "accepted": decision}

@@ -529,11 +529,14 @@ class RetailTools(ToolKitBase):  # Tools
             payment_method.balance -= diff_price
             payment_method.balance = round(payment_method.balance, 2)
 
-        # Modify the order
+        # RetailFlow patch: resolve original rows before mutating IDs, consuming duplicates.
+        remaining = list(order.items)
+        replacements = []
         for item_id, new_item_id in zip(item_ids, new_item_ids):
-            item = next((item for item in order.items if item.item_id == item_id), None)
-            if item is None:
-                raise ValueError(f"Item {item_id} not found")
+            index = next(i for i, item in enumerate(remaining) if item.item_id == item_id)
+            item = remaining.pop(index)
+            replacements.append((item, new_item_id, self._get_variant(item.product_id, new_item_id)))
+        for item, new_item_id, variant in replacements:
             item.item_id = new_item_id
             item.price = variant.price
             item.options = variant.options

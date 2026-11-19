@@ -1,6 +1,6 @@
 # RetailFlow
 
-本地零售业务 Agent，基于 LangGraph、Ollama 和固定版 τ2-bench retail 模拟环境，支持订单查询、取消、退货与已送达订单的换货申请。
+本地零售业务 Agent，基于 LangGraph、Ollama 和固定版 τ2-bench retail 模拟环境，支持订单查询、取消、退货、待处理订单的商品修改，以及已送达订单的换货申请。
 
 [业务演示](#业务演示) · [主要改造](#主要改造) · [执行流程](#执行流程) · [快速开始](#快速开始) · [Langfuse 可观测性](#langfuse-可观测性) · [设计说明](docs/architecture.md)
 
@@ -71,7 +71,7 @@ flowchart LR
     M --> A[答复或停止]
 ```
 
-模型可见九个业务工具及一个 `ask_user`。`confirm_action` 不向模型暴露；写入结果未知时不自动重试写操作。恢复与重复执行保护仅针对本地事务和已测试路径，不是分布式 exactly-once 保证。
+项目提供十一种业务工具和一个 `ask_user`，可按认证和订单状态限制可见工具。`confirm_action` 不向模型暴露；写入结果未知时不自动重试写操作。恢复与重复执行保护仅针对本地事务和已测试路径，不是分布式 exactly-once 保证。
 
 ## 快速开始
 

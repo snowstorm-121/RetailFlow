@@ -54,39 +54,66 @@ class ScriptedUser:
             if rule["decision"] == "decline":
                 self.consent = {}
             return False, rule["reply"]
-        if proposal["name"] not in self.consent.get("tools", [self.consent.get("tool")]):
+        consent = self.consent
+        if "by_tool" in consent:
+            consent = consent["by_tool"].get(proposal["name"], {})
+            consent = {"tool": proposal["name"], **consent} if consent else {}
+        if "by_order" in consent:
+            consent = {**consent, **consent["by_order"].get(args["order_id"], {})}
+            if args["order_id"] not in consent["by_order"]:
+                return False, None
+        if proposal["name"] not in consent.get("tools", [consent.get("tool")]):
             return False, None
-        include = {name.casefold() for name in self.consent.get("include", [])}
-        exclude = {name.casefold() for name in self.consent.get("exclude", [])}
+        include = {name.casefold() for name in consent.get("include", [])}
+        exclude = {name.casefold() for name in consent.get("exclude", [])}
         allowed = bool(names) and not names & exclude
         if include:
             allowed &= bool(names & include) if proposal["name"] == "cancel_pending_order" else names <= include
         else:
-            allowed &= bool(self.consent.get("all"))
+            allowed &= bool(consent.get("all"))
         if proposal["name"] == "return_delivered_order_items":
             allowed &= args["payment_method_id"] == display["original_payment_method_id"]
             all_items = display.get("all_items", items)
             expected_ids = sorted(item["item_id"] for item in all_items
                                   if item["name"].casefold() not in exclude
-                                  and (not include or item["name"].casefold() in include))
+                                  and (not include or item["name"].casefold() in include)
+                                  and all(item.get("options", {}).get(k) == v for k, v in
+                                          consent.get("return_options", {}).get(item["name"], {}).items()))
             allowed &= sorted(args["item_ids"]) == expected_ids
-        if proposal["name"] == "exchange_delivered_order_items":
+        if proposal["name"] in {"exchange_delivered_order_items", "modify_pending_order_items"}:
             pairs = display.get("exchange_pairs", [])
             allowed &= bool(pairs) and len(pairs) == len(args["item_ids"]) == len(args["new_item_ids"])
-            required = self.consent.get("exchange_required_names")
+            required = consent.get("exchange_required_names")
             if required:
                 allowed &= names == {name.casefold() for name in required}
             for pair in pairs:
-                expected = self.consent.get("exchange_options", {}).get(pair["name"], {})
-                old_expected = self.consent.get("exchange_old_options", {}).get(pair["name"], {})
+                expected = consent.get("exchange_options", {}).get(pair["name"], {})
+                old_expected = consent.get("exchange_old_options", {}).get(pair["name"], {})
                 allowed &= all(pair["new_options"].get(k) == v for k, v in expected.items())
                 allowed &= all(pair["old_options"].get(k) == v for k, v in old_expected.items())
-            payment_source = self.consent.get("exchange_payment_source")
+            requirements = consent.get("exchange_requirements")
+            if requirements is not None:
+                # Match a multiset, not a set of names: two kettles may need different variants.
+                assigned = {}
+                def match(index, seen):
+                    requirement = requirements[index]
+                    for slot, pair in enumerate(pairs):
+                        if (slot in seen or pair["name"] != requirement["name"]
+                                or any(pair["new_options"].get(k) != v for k, v in requirement.get("new_options", {}).items())
+                                or any(pair["old_options"].get(k) != v for k, v in requirement.get("old_options", {}).items())):
+                            continue
+                        seen.add(slot)
+                        if slot not in assigned or match(assigned[slot], seen):
+                            assigned[slot] = index
+                            return True
+                    return False
+                allowed &= len(requirements) == len(pairs) and all(match(i, set()) for i in range(len(requirements)))
+            payment_source = consent.get("exchange_payment_source")
             if payment_source:
                 allowed &= display.get("payment_source") == payment_source
             else:
                 allowed &= args["payment_method_id"] == display["original_payment_method_id"]
-        reason = self.consent.get("cancel_reason")
+        reason = consent.get("cancel_reason")
         if reason and proposal["name"] == "cancel_pending_order":
             allowed &= args["reason"] == reason
-        return bool(allowed), None
+        return bool(allowed), None if allowed else self.consent.get("rejection_reply")

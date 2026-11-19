@@ -174,11 +174,11 @@ class RetailEnvironment:
                         pending = {"proposal_id": uuid.uuid4().hex, "name": name, "args": args, "confirmed": False, "created_at": time.time()}
                         order = business["orders"][args["order_id"]]
                         selected = args.get("item_ids")
-                        pending["display"] = {"items": [{"name": item["name"], "item_id": item["item_id"]}
+                        pending["display"] = {"items": [{"name": item["name"], "item_id": item["item_id"], "options": item["options"], "price": item["price"]}
                                                           for item in order["items"] if selected is None or item["item_id"] in selected],
-                                              "all_items": [{"name": item["name"], "item_id": item["item_id"]} for item in order["items"]],
+                                              "all_items": [{"name": item["name"], "item_id": item["item_id"], "options": item["options"], "price": item["price"]} for item in order["items"]],
                                               "original_payment_method_id": order["payment_history"][0]["payment_method_id"]}
-                        if name == "exchange_delivered_order_items":
+                        if name in {"exchange_delivered_order_items", "modify_pending_order_items"}:
                             pairs = []
                             for old_id, new_id in zip(args["item_ids"], args["new_item_ids"]):
                                 old = next(item for item in order["items"] if item["item_id"] == old_id)
@@ -187,10 +187,10 @@ class RetailEnvironment:
                                               "old_options": old["options"], "new_options": new["options"],
                                               "old_price": old["price"], "new_price": new["price"]})
                             pending["display"].update(exchange_pairs=pairs,
-                                price_difference=preview["exchange_price_difference"],
+                                price_difference=round(sum(p["new_price"] - p["old_price"] for p in pairs), 2),
                                 payment_method_id=args["payment_method_id"],
                                 payment_source=business["users"][user_id]["payment_methods"][args["payment_method_id"]]["source"],
-                                settlement_status="not_settled")
+                                settlement_status="not_settled" if name == "exchange_delivered_order_items" else "simulated_payment_recorded_on_commit")
                         sql.execute("UPDATE sessions SET pending_json = ? WHERE thread = ?", (_json(pending), thread_id))
                     return {"ok": False, "code": "CONFIRMATION_REQUIRED", "proposal_id": pending["proposal_id"], "proposal": pending}
                 try:

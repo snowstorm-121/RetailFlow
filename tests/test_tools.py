@@ -22,7 +22,7 @@ def test_identity_must_be_located_and_cannot_switch_user(env):
 
 
 def test_schema_and_tool_allowlist(env):
-    assert env.dispatch_tool("session-a", "modify_pending_order_items", {})["code"] == "UNKNOWN_TOOL"
+    assert env.dispatch_tool("session-a", "modify_pending_order_payment", {})["code"] == "UNKNOWN_TOOL"
     assert env.dispatch_tool("session-a", "cancel_pending_order", {"order_id": "#W5056519", "reason": "ordered by mistake", "approved": True})["code"] == "INVALID_ARGUMENT"
     assert env.dispatch_tool("session-a", "get_order_details", {"order_id": 5056519})["code"] == "INVALID_ARGUMENT"
 

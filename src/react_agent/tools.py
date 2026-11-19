@@ -41,6 +41,8 @@ RETAIL_DESCRIPTIONS = {
     "cancel_pending_order": "Stage a cancellation proposal for the authenticated user's pending order. The first call does NOT cancel; it returns a proposal for the application to confirm. Preserve the leading # in the order ID. Reason must be 'ordered by mistake' or 'no longer needed'.",
     "return_delivered_order_items": "Stage a return proposal for selected item IDs in the authenticated user's delivered order. The first call does NOT return items; it creates an application confirmation proposal. Preserve the leading # in the order ID.",
     "exchange_delivered_order_items": "Stage an exchange proposal for a delivered order. Pair each old item_id with a new_item_id of the SAME product, in matching list positions. Read available variants and choose an existing user payment method for the price difference. The application displays details and requires confirmation; no settlement occurs here.",
+    "modify_pending_order_items": "Stage a pending order item modification. Pair old/new IDs of the same product; all changes must be collected before the single allowed modification. Application confirmation is required; signed price difference is recorded in simulated payments.",
+    "calculate": "Calculate a monetary expression using numbers, parentheses and + - * / only. Use for totals and price comparisons; this does not change any business data.",
     "transfer_to_human_agents": "Mark a request for human handoff when it cannot be handled by these tools. No human is contacted here.",
 }
 
@@ -84,7 +86,9 @@ def retail_tools_for_session(session):
     if not session.get("user_id"):
         names.update({"find_user_id_by_email", "find_user_id_by_name_zip"})
     else:
-        names.update({"get_user_details", "get_order_details", "get_product_details"})
+        names.update({"get_user_details", "get_order_details", "get_product_details", "calculate"})
+        if session.get("target_order_status") == "pending":
+            names.add("modify_pending_order_items")
         write = {"pending": "cancel_pending_order", "delivered": "return_delivered_order_items"}.get(
             session.get("target_order_status"))
         if write:

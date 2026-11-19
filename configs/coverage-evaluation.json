@@ -1,0 +1,1741 @@
+{
+  "dataset_version": "t4-coverage-v2",
+  "upstream_commit": "2174a603f6d014ef94473ffa95957f6ce27100db",
+  "source_root": "vendor/tau_retail/source",
+  "seed": 42,
+  "selected_tasks": [
+    {
+      "id": "2",
+      "category": "legal_write",
+      "user_id": "yusuf_rossi_9620",
+      "opening": "How many T-shirt options are available? I also want to return the vacuum cleaner, headphones, and smart watch I received.",
+      "field_responses": {
+        "order": "I don't remember the order number.",
+        "return_items": "The vacuum cleaner, headphones, and smart watch.",
+        "refund_method": "The original payment method."
+      }
+    },
+    {
+      "id": "24",
+      "category": "multiturn_change",
+      "user_id": "sofia_hernandez_5364",
+      "opening": "I'd like to cancel the grill I ordered.",
+      "field_responses": {
+        "order": "I don't remember its order number."
+      },
+      "proposal_rules": [
+        {
+          "tool": "cancel_pending_order",
+          "decision": "decline",
+          "reply": "Actually, keep the grill. Which two T-shirts did I order in another order, and what materials are they?"
+        }
+      ]
+    },
+    {
+      "id": "48",
+      "category": "legal_write",
+      "user_id": "daiki_johnson_9523",
+      "opening": "The air purifier I received doesn't work well. Please return it to my original payment method. At the end, tell me whether I could return the vacuum cleaner too; don't process that one yet.",
+      "field_responses": {
+        "order": "I don't remember the order number.",
+        "return_items": "Just the air purifier.",
+        "refund_method": "The original payment method."
+      }
+    },
+    {
+      "id": "50",
+      "category": "refusal_handoff",
+      "user_id": "chen_smith_8425",
+      "opening": "Please undo an order I cancelled and make sure it gets delivered as soon as possible.",
+      "field_responses": {
+        "order": "I don't remember the order number."
+      }
+    },
+    {
+      "id": "69",
+      "category": "legal_write",
+      "user_id": "emma_smith_8564",
+      "opening": "I received a laptop I ordered around April 2023 and found a better deal elsewhere. Can I return it for a full refund? If it hasn't arrived yet, please cancel it.",
+      "field_responses": {
+        "order": "I don't remember the number.",
+        "cancel_reason": "I no longer need it."
+      }
+    },
+    {
+      "id": "73",
+      "category": "legal_write",
+      "user_id": "fatima_wilson_7472",
+      "opening": "Please return everything I just bought except the coffee machine.",
+      "field_responses": {
+        "order": "I don't remember the number.",
+        "return_items": "Everything from that order except the coffee machine.",
+        "refund_method": "The original payment method."
+      }
+    },
+    {
+      "id": "81",
+      "category": "legal_write",
+      "user_id": "james_kim_7213",
+      "opening": "I no longer need the hiking boots, watch, keyboard, charger, jacket, or running shoes. If you can't cancel only those items, cancel the whole orders.",
+      "field_responses": {
+        "order": "I don't remember the order numbers.",
+        "cancel_reason": "I no longer need them."
+      }
+    },
+    {
+      "id": "92",
+      "category": "multiturn_change",
+      "user_id": "mei_ahmed_4909",
+      "opening": "I'm unhappy with the two skateboards I bought. Please return them and refund my credit card.",
+      "field_responses": {
+        "order": "I don't remember the order numbers.",
+        "return_items": "The two skateboards; I may have more to add before I confirm.",
+        "refund_method": "My credit card."
+      },
+      "proposal_rules": [
+        {
+          "tool": "return_delivered_order_items",
+          "order_id": "#W7553978",
+          "unless_item_name": "Smart Watch",
+          "decision": "revise",
+          "reply": "Wait, add the smart watch to this return. I also want to return the e-reader from my other order."
+        }
+      ]
+    },
+    {
+      "id": "113",
+      "category": "legal_write",
+      "user_id": "yara_muller_8652",
+      "opening": "I want to cancel all of my pending orders.",
+      "field_responses": {
+        "order": "I don't remember the order numbers.",
+        "cancel_reason": "I ordered them by mistake."
+      }
+    },
+    {
+      "id": "51",
+      "category": "legal_write",
+      "user_id": "sofia_li_9219",
+      "opening": "I want to return the digital camera I received. I think its order is #W8855135, but I'm not certain. Please refund the original payment method.",
+      "field_responses": {
+        "order": "I only remember #W8855135, but please check whether it is the camera order.",
+        "return_items": "Just the digital camera.",
+        "refund_method": "The original payment method."
+      }
+    },
+    {
+      "id": "53",
+      "category": "legal_write",
+      "user_id": "sofia_li_9219",
+      "opening": "The bicycle I received was damaged in delivery. I'd like a refund to my original credit card.",
+      "field_responses": {
+        "order": "I don't remember the number.",
+        "return_items": "The bicycle.",
+        "refund_method": "My original credit card."
+      }
+    },
+    {
+      "id": "68",
+      "category": "query",
+      "user_id": "noah_ito_3850",
+      "opening": "How much did I pay for my most recent order? I don't remember when I placed it.",
+      "field_responses": {
+        "identity": [
+          "I'm Noah Ito, ZIP 98178.",
+          "Sorry, my ZIP is 98187."
+        ],
+        "order": "I don't know the order number."
+      }
+    },
+    {
+      "id": "108",
+      "category": "legal_write",
+      "user_id": "yusuf_gonzalez_8900",
+      "opening": "In a recently delivered order, please return everything except the tablet, including the e-reader. How much money would I get back?",
+      "field_responses": {
+        "order": "I don't remember the number.",
+        "return_items": "Everything except the tablet.",
+        "refund_method": "The original payment method."
+      }
+    },
+    {
+      "id": "10",
+      "category": "refusal_handoff",
+      "user_id": "mia_garcia_4516",
+      "opening": "I want to return everything in both my orders, refunding each order to the other order's payment method. If that is not allowed, please connect me with a human representative.",
+      "field_responses": {
+        "order": "I have two orders. Please check both.",
+        "return_items": "Everything in both orders.",
+        "refund_method": "Use each order's other payment method, not its original method. If that is not allowed, transfer me to a human."
+      }
+    },
+    {
+      "id": "88",
+      "category": "legal_write",
+      "user_id": "daiki_silva_2903",
+      "opening": "Can you change my bookshelf to 4 feet tall, keeping its material and color? If that option is unavailable, cancel the whole order and I will buy again.",
+      "field_responses": {
+        "order": "Please find the order containing my bookshelf.",
+        "cancel_reason": "I ordered it by mistake."
+      }
+    },
+    {
+      "id": "89",
+      "category": "legal_write",
+      "user_id": "raj_santos_9079",
+      "opening": "What is the cheapest available mechanical keyboard and what are its options? If it costs less than $200, exchange my current one for it. Otherwise, return my current keyboard.",
+      "field_responses": {
+        "order": "Please find my mechanical keyboard order.",
+        "return_items": "Just the mechanical keyboard.",
+        "refund_method": "The original payment method."
+      }
+    },
+    {
+      "id": "90",
+      "category": "legal_write",
+      "user_id": "emma_kovacs_9839",
+      "opening": "Does the digital camera I just bought have 10x zoom? If not, change it to 10x without changing other options. If that option is unavailable, cancel the order because I no longer need it. If it is available but costs more than $3000, cancel because I ordered by mistake.",
+      "field_responses": {
+        "order": "Please find my digital camera order.",
+        "cancel_reason": "If the 10x version is unavailable, no longer needed; if it is available but over $3000, ordered by mistake."
+      }
+    },
+    {
+      "id": "11",
+      "category": "legal_write",
+      "user_id": "mia_garcia_4516",
+      "opening": "I want to return everything in both my orders and refund each order to the other order's payment method. If that is not permitted, explain why and return everything to the original payment methods instead.",
+      "field_responses": {
+        "order": "Both of my orders.",
+        "return_items": "Everything in both orders.",
+        "refund_method": "I prefer swapping the two methods; if that is not permitted, use each order's original payment method."
+      }
+    },
+    {
+      "id": "13",
+      "category": "legal_write",
+      "user_id": "mia_garcia_4516",
+      "opening": "I just got into gaming. Please cancel or return everything I ordered that is not associated with gaming. I prefer PayPal for the refund, but a credit card is acceptable if PayPal is not allowed.",
+      "field_responses": {
+        "order": "Please check both my orders.",
+        "return_items": "Everything not associated with gaming.",
+        "refund_method": "PayPal if allowed, otherwise credit card."
+      }
+    },
+    {
+      "id": "14",
+      "category": "legal_write",
+      "user_id": "mia_garcia_4516",
+      "opening": "I quit gaming. Please cancel or return everything I ordered that is associated with gaming. Refund to the original payment methods.",
+      "field_responses": {
+        "order": "Please check both my orders.",
+        "return_items": "Everything associated with gaming.",
+        "refund_method": "The original payment methods."
+      }
+    },
+    {
+      "id": "0",
+      "category": "legal_write",
+      "user_id": "yusuf_rossi_9620",
+      "opening": "I received order #W2378156. Exchange my mechanical keyboard for clicky switches, keeping RGB backlight and full size; if no such variant is available, no backlight is acceptable. Also exchange my smart thermostat from Apple HomeKit to Google Home compatibility.",
+      "field_responses": {
+        "order": "Please find the order containing those items.",
+        "exchange_items": "Mechanical Keyboard, Smart Thermostat",
+        "exchange_options": "I received order #W2378156. Exchange my mechanical keyboard for clicky switches, keeping RGB backlight and full size; if no such variant is available, no backlight is acceptable. Also exchange my smart thermostat from Apple HomeKit to Google Home compatibility.",
+        "payment_method": "The original payment method."
+      }
+    },
+    {
+      "id": "1",
+      "category": "legal_write",
+      "user_id": "yusuf_rossi_9620",
+      "opening": "I received order #W2378156. Exchange my mechanical keyboard for clicky switches while keeping RGB backlight and full size. If that variant is unavailable, leave the keyboard and only exchange my smart thermostat to Google Home compatibility.",
+      "field_responses": {
+        "order": "Please find the order containing those items.",
+        "exchange_items": "Smart Thermostat",
+        "exchange_options": "I received order #W2378156. Exchange my mechanical keyboard for clicky switches while keeping RGB backlight and full size. If that variant is unavailable, leave the keyboard and only exchange my smart thermostat to Google Home compatibility.",
+        "payment_method": "The original payment method."
+      }
+    },
+    {
+      "id": "75",
+      "category": "legal_write",
+      "user_id": "liam_moore_4057",
+      "opening": "In #W6908222, exchange my blue wireless earbuds with 8-hour battery and IPX4 resistance for black earbuds with 4-hour battery and no water resistance.",
+      "field_responses": {
+        "order": "Please find the order containing those items.",
+        "exchange_items": "Wireless Earbuds",
+        "exchange_options": "In #W6908222, exchange my blue wireless earbuds with 8-hour battery and IPX4 resistance for black earbuds with 4-hour battery and no water resistance.",
+        "payment_method": "The original payment method."
+      }
+    },
+    {
+      "id": "77",
+      "category": "legal_write",
+      "user_id": "ivan_johnson_6036",
+      "opening": "I tried a little of the perfume I ordered and like it. Please exchange it for the largest size available, keeping the same perfume.",
+      "field_responses": {
+        "order": "Please find the order containing those items.",
+        "exchange_items": "Perfume",
+        "exchange_options": "I tried a little of the perfume I ordered and like it. Please exchange it for the largest size available, keeping the same perfume.",
+        "payment_method": "The original payment method."
+      }
+    },
+    {
+      "id": "80",
+      "category": "legal_write",
+      "user_id": "amelia_gonzalez_4098",
+      "opening": "In #W7209932, exchange my blue small polyester V-neck T-shirt for a red XXL cotton crew-neck T-shirt. Use my gift card for the price difference.",
+      "field_responses": {
+        "order": "Please find the order containing those items.",
+        "exchange_items": "T-Shirt",
+        "exchange_options": "In #W7209932, exchange my blue small polyester V-neck T-shirt for a red XXL cotton crew-neck T-shirt. Use my gift card for the price difference.",
+        "payment_method": "My gift card."
+      }
+    },
+    {
+      "id": "93",
+      "category": "legal_write",
+      "user_id": "lei_wilson_4541",
+      "opening": "I received a laptop and want to exchange it for one with an i7 processor, 8GB RAM and 1TB SSD.",
+      "field_responses": {
+        "order": "Please find the order containing those items.",
+        "exchange_items": "The 15-inch laptop with 32GB RAM.",
+        "exchange_options": "I received a laptop and want to exchange it for one with an i7 processor, 8GB RAM and 1TB SSD.",
+        "payment_method": "The original payment method."
+      }
+    },
+    {
+      "id": "106",
+      "category": "legal_write",
+      "user_id": "sofia_thomas_1518",
+      "opening": "The T-shirt I received is too large. Exchange it for one size smaller. Keep it cotton, and I prefer black if available.",
+      "field_responses": {
+        "order": "Please find the order containing those items.",
+        "exchange_items": "T-Shirt",
+        "exchange_options": "The T-shirt I received is too large. Exchange it for one size smaller. Keep it cotton, and I prefer black if available.",
+        "payment_method": "The original payment method."
+      }
+    },
+    {
+      "id": "3",
+      "category": "legal_write",
+      "user_id": "yusuf_rossi_9620",
+      "opening": "How many T-shirt variants are available? Modify all my pending small T-shirts to purple, keeping size S and v-neck, preferably polyester.",
+      "field_responses": {
+        "identity": "You are Yusuf Rossi in zipcode 19122.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "How many T-shirt variants are available? Modify all my pending small T-shirts to purple, keeping size S and v-neck, preferably polyester.",
+        "exchange_options": "How many T-shirt variants are available? Modify all my pending small T-shirts to purple, keeping size S and v-neck, preferably polyester.",
+        "return_items": "How many T-shirt variants are available? Modify all my pending small T-shirts to purple, keeping size S and v-neck, preferably polyester."
+      }
+    },
+    {
+      "id": "4",
+      "category": "legal_write",
+      "user_id": "yusuf_rossi_9620",
+      "opening": "How many T-shirt variants are available? Modify all my pending T-shirts to purple size S, v-neck, preferably polyester.",
+      "field_responses": {
+        "identity": "You are Yusuf Rossi in zipcode 19122.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "How many T-shirt variants are available? Modify all my pending T-shirts to purple size S, v-neck, preferably polyester.",
+        "exchange_options": "How many T-shirt variants are available? Modify all my pending T-shirts to purple size S, v-neck, preferably polyester.",
+        "return_items": "How many T-shirt variants are available? Modify all my pending T-shirts to purple size S, v-neck, preferably polyester."
+      }
+    },
+    {
+      "id": "6",
+      "category": "multiturn_change",
+      "user_id": "mei_kovacs_8020",
+      "opening": "Exchange my water bottle for a bigger one, and my desk lamp for a less bright one. For the lamp I prefer battery, then USB, then AC.",
+      "field_responses": {
+        "identity": "My name is Mei Kovacs, ZIP 28236.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "Exchange my water bottle for a bigger one, and my desk lamp for a less bright one. For the lamp I prefer battery, then USB, then AC.",
+        "exchange_options": "Exchange my water bottle for a bigger one, and my desk lamp for a less bright one. For the lamp I prefer battery, then USB, then AC.",
+        "return_items": "Exchange my water bottle for a bigger one, and my desk lamp for a less bright one. For the lamp I prefer battery, then USB, then AC."
+      },
+      "proposal_rules": [
+        {
+          "tool": "exchange_delivered_order_items",
+          "decision": "revise",
+          "reply": "Actually, exchange only the desk lamp. Keep the bottle. I still want it less bright, preferring battery, then USB, then AC."
+        }
+      ],
+      "required_proposal_rules": [
+        0
+      ]
+    },
+    {
+      "id": "7",
+      "category": "multiturn_change",
+      "user_id": "mei_kovacs_8020",
+      "opening": "Exchange my water bottle for a bigger one, and my desk lamp for a less bright one. For the lamp I prefer AC adapter, then battery, then USB.",
+      "field_responses": {
+        "identity": "My name is Mei Kovacs, ZIP 28236.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "Exchange my water bottle for a bigger one, and my desk lamp for a less bright one. For the lamp I prefer AC adapter, then battery, then USB.",
+        "exchange_options": "Exchange my water bottle for a bigger one, and my desk lamp for a less bright one. For the lamp I prefer AC adapter, then battery, then USB.",
+        "return_items": "Exchange my water bottle for a bigger one, and my desk lamp for a less bright one. For the lamp I prefer AC adapter, then battery, then USB."
+      },
+      "proposal_rules": [
+        {
+          "tool": "exchange_delivered_order_items",
+          "decision": "revise",
+          "reply": "Actually, exchange only the desk lamp. Keep the bottle. I still want it less bright, preferring AC adapter, then battery, then USB."
+        }
+      ],
+      "required_proposal_rules": [
+        0
+      ]
+    },
+    {
+      "id": "9",
+      "category": "multiturn_change",
+      "user_id": "mei_kovacs_8020",
+      "opening": "Exchange my water bottle for a bigger one, and my desk lamp for a brighter one. For the lamp I prefer AC adapter, then battery, then USB.",
+      "field_responses": {
+        "identity": "My name is Mei Kovacs, ZIP 28236.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "Exchange my water bottle for a bigger one, and my desk lamp for a brighter one. For the lamp I prefer AC adapter, then battery, then USB.",
+        "exchange_options": "Exchange my water bottle for a bigger one, and my desk lamp for a brighter one. For the lamp I prefer AC adapter, then battery, then USB.",
+        "return_items": "Exchange my water bottle for a bigger one, and my desk lamp for a brighter one. For the lamp I prefer AC adapter, then battery, then USB."
+      },
+      "proposal_rules": [
+        {
+          "tool": "exchange_delivered_order_items",
+          "decision": "revise",
+          "reply": "Actually, exchange only the desk lamp. Keep the bottle. I still want it brighter, preferring AC adapter, then battery, then USB."
+        }
+      ],
+      "required_proposal_rules": [
+        0
+      ]
+    },
+    {
+      "id": "5",
+      "category": "multiturn_change",
+      "user_id": "mei_kovacs_8020",
+      "opening": "Exchange my water bottle for a bigger one and my desk lamp for a less bright one, preferring battery, then USB, then AC.",
+      "field_responses": {
+        "identity": "My name is Mei Kovacs, ZIP 28236.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "Exchange my water bottle for a bigger one and my desk lamp for a less bright one, preferring battery, then USB, then AC.",
+        "exchange_options": "Exchange my water bottle for a bigger one and my desk lamp for a less bright one, preferring battery, then USB, then AC.",
+        "return_items": "Exchange my water bottle for a bigger one and my desk lamp for a less bright one, preferring battery, then USB, then AC."
+      },
+      "proposal_rules": [
+        {
+          "tool": "exchange_delivered_order_items",
+          "decision": "revise",
+          "reply": "Actually, only exchange the desk lamp; keep the water bottle."
+        },
+        {
+          "tool": "exchange_delivered_order_items",
+          "decision": "revise",
+          "reply": "Do not exchange anything. Return only the water bottle to the original payment method instead."
+        }
+      ],
+      "required_proposal_rules": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "12",
+      "category": "legal_write",
+      "user_id": "mia_garcia_4516",
+      "opening": "I got into gaming and want to cancel or return everything unrelated to gaming. I want PayPal for the refund; if you cannot do that, hand this to a human.",
+      "field_responses": {
+        "identity": "You are mia_garcia_4516 (mia.garcia2723@example.com).",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "PayPal only. Transfer to a human if unavailable.",
+        "refund_method": "PayPal only. Transfer to a human if unavailable.",
+        "exchange_items": "I got into gaming and want to cancel or return everything unrelated to gaming. I want PayPal for the refund; if you cannot do that, hand this to a human.",
+        "exchange_options": "I got into gaming and want to cancel or return everything unrelated to gaming. I want PayPal for the refund; if you cannot do that, hand this to a human.",
+        "return_items": "Everything except the keyboard and mouse."
+      }
+    },
+    {
+      "id": "19",
+      "category": "legal_write",
+      "user_id": "mei_davis_8935",
+      "opening": "Return my water bottle and exchange my pet bed and office chair to their cheapest versions. I want both; if only one option is possible, choose whichever saves more money and tell me the savings for both.",
+      "field_responses": {
+        "identity": "You are Mei Davis in zipcode 80217.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "Return my water bottle and exchange my pet bed and office chair to their cheapest versions. I want both; if only one option is possible, choose whichever saves more money and tell me the savings for both.",
+        "exchange_options": "Return my water bottle and exchange my pet bed and office chair to their cheapest versions. I want both; if only one option is possible, choose whichever saves more money and tell me the savings for both.",
+        "return_items": "Only the water bottle."
+      }
+    },
+    {
+      "id": "20",
+      "category": "legal_write",
+      "user_id": "ethan_garcia_1261",
+      "opening": "Upgrade all my items to the most expensive available variants. Keep the shoe size unchanged; other features do not matter. If an order cannot be changed, explain and proceed to the next order. Use my gift card, or PayPal if that is impossible.",
+      "field_responses": {
+        "identity": "You are Ethan Garcia, and you live in Denver, 80280.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "Use my gift card; PayPal only if that cannot cover it.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "Upgrade all my items to the most expensive available variants. Keep the shoe size unchanged; other features do not matter. If an order cannot be changed, explain and proceed to the next order. Use my gift card, or PayPal if that is impossible.",
+        "exchange_options": "Upgrade all my items to the most expensive available variants. Keep the shoe size unchanged; other features do not matter. If an order cannot be changed, explain and proceed to the next order. Use my gift card, or PayPal if that is impossible.",
+        "return_items": "Upgrade all my items to the most expensive available variants. Keep the shoe size unchanged; other features do not matter. If an order cannot be changed, explain and proceed to the next order. Use my gift card, or PayPal if that is impossible."
+      }
+    },
+    {
+      "id": "23",
+      "category": "legal_write",
+      "user_id": "sofia_hernandez_5364",
+      "opening": "Exchange my helmet to medium, red, high ventilation; exchange my luggage set in another order to a black two-piece softshell set. Also modify my newly ordered grill to the same type as the grill I already received.",
+      "field_responses": {
+        "identity": "You are Sofia Hernandez, and you live in Seattle, WA, 98193.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "Exchange my helmet to medium, red, high ventilation; exchange my luggage set in another order to a black two-piece softshell set. Also modify my newly ordered grill to the same type as the grill I already received.",
+        "exchange_options": "Exchange my helmet to medium, red, high ventilation; exchange my luggage set in another order to a black two-piece softshell set. Also modify my newly ordered grill to the same type as the grill I already received.",
+        "return_items": "Exchange my helmet to medium, red, high ventilation; exchange my luggage set in another order to a black two-piece softshell set. Also modify my newly ordered grill to the same type as the grill I already received."
+      }
+    },
+    {
+      "id": "27",
+      "category": "legal_write",
+      "user_id": "isabella_johansson_2152",
+      "opening": "Return my garden hose and backpack, and exchange my hiking boots for exactly the same specs except waterproof. If the order permits only one operation, I prefer the exchange.",
+      "field_responses": {
+        "identity": "You are Isabella Johansson, and you live in zipcode 32286.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "Return my garden hose and backpack, and exchange my hiking boots for exactly the same specs except waterproof. If the order permits only one operation, I prefer the exchange.",
+        "exchange_options": "Return my garden hose and backpack, and exchange my hiking boots for exactly the same specs except waterproof. If the order permits only one operation, I prefer the exchange.",
+        "return_items": "Return my garden hose and backpack, and exchange my hiking boots for exactly the same specs except waterproof. If the order permits only one operation, I prefer the exchange."
+      }
+    },
+    {
+      "id": "29",
+      "category": "legal_write",
+      "user_id": "isabella_johansson_2152",
+      "opening": "Exchange my skateboard for a shorter bamboo one. Tell me all available options and prices; choose the most expensive. Also exchange my delivered garden hose to the type in my pending order. Do not cancel anything.",
+      "field_responses": {
+        "identity": "You are Isabella Johansson, and you live in zipcode 32286.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "Exchange my skateboard for a shorter bamboo one. Tell me all available options and prices; choose the most expensive. Also exchange my delivered garden hose to the type in my pending order. Do not cancel anything.",
+        "exchange_options": "Exchange my skateboard for a shorter bamboo one. Tell me all available options and prices; choose the most expensive. Also exchange my delivered garden hose to the type in my pending order. Do not cancel anything.",
+        "return_items": "Exchange my skateboard for a shorter bamboo one. Tell me all available options and prices; choose the most expensive. Also exchange my delivered garden hose to the type in my pending order. Do not cancel anything."
+      }
+    },
+    {
+      "id": "35",
+      "category": "legal_write",
+      "user_id": "aarav_santos_2259",
+      "opening": "Return the more expensive speaker that is not water resistant. Modify the 17-inch laptop in another order to 13-inch. If the exact version is unavailable, list all available 13-inch options; I prefer i5 over i7 and silver or black over other colors.",
+      "field_responses": {
+        "identity": "You are aarav_santos_2259 and aarav.santos8321@example.com and aarav.santos8320@example.com.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "Return the more expensive speaker that is not water resistant. Modify the 17-inch laptop in another order to 13-inch. If the exact version is unavailable, list all available 13-inch options; I prefer i5 over i7 and silver or black over other colors.",
+        "exchange_options": "Return the more expensive speaker that is not water resistant. Modify the 17-inch laptop in another order to 13-inch. If the exact version is unavailable, list all available 13-inch options; I prefer i5 over i7 and silver or black over other colors.",
+        "return_items": "The more expensive speaker that is not water resistant."
+      }
+    },
+    {
+      "id": "36",
+      "category": "legal_write",
+      "user_id": "daiki_sanchez_3253",
+      "opening": "My recent order exceeds $1160 but my card has only $1131 credit. Can you split payment? If not, tell me the most expensive item and price and whether you can cancel only it. If not, change all items to their cheapest variants if the total is at most $1131; otherwise cancel the order.",
+      "field_responses": {
+        "identity": "Your name is Daiki Sanchez, and you live in 46236, your email is daikisanchez1479@example.com.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "My recent order exceeds $1160 but my card has only $1131 credit. Can you split payment? If not, tell me the most expensive item and price and whether you can cancel only it. If not, change all items to their cheapest variants if the total is at most $1131; otherwise cancel the order.",
+        "exchange_options": "My recent order exceeds $1160 but my card has only $1131 credit. Can you split payment? If not, tell me the most expensive item and price and whether you can cancel only it. If not, change all items to their cheapest variants if the total is at most $1131; otherwise cancel the order.",
+        "return_items": "My recent order exceeds $1160 but my card has only $1131 credit. Can you split payment? If not, tell me the most expensive item and price and whether you can cancel only it. If not, change all items to their cheapest variants if the total is at most $1131; otherwise cancel the order.",
+        "cancel_reason": "I no longer need it."
+      }
+    },
+    {
+      "id": "38",
+      "category": "legal_write",
+      "user_id": "daiki_sanchez_3253",
+      "opening": "My recent order exceeds $1100 but my card has only $950 credit. Can you split payment? If not, tell me the most expensive item and price and whether you can cancel only it. If not, check whether cheapest variants bring the whole order to at most $950. If they do not, cancel the order so I can reorder.",
+      "field_responses": {
+        "identity": "Your name is Daiki Sanchez, and you live in 46236, your email is daikisanchez1479@example.com.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "My recent order exceeds $1100 but my card has only $950 credit. Can you split payment? If not, tell me the most expensive item and price and whether you can cancel only it. If not, check whether cheapest variants bring the whole order to at most $950. If they do not, cancel the order so I can reorder.",
+        "exchange_options": "My recent order exceeds $1100 but my card has only $950 credit. Can you split payment? If not, tell me the most expensive item and price and whether you can cancel only it. If not, check whether cheapest variants bring the whole order to at most $950. If they do not, cancel the order so I can reorder.",
+        "return_items": "My recent order exceeds $1100 but my card has only $950 credit. Can you split payment? If not, tell me the most expensive item and price and whether you can cancel only it. If not, check whether cheapest variants bring the whole order to at most $950. If they do not, cancel the order so I can reorder.",
+        "cancel_reason": "I no longer need it."
+      }
+    },
+    {
+      "id": "44",
+      "category": "legal_write",
+      "user_id": "aarav_anderson_8794",
+      "opening": "Change the desk lamp in #W9300146 to the cheapest available desk lamp. Put any refund onto my gift card and tell me how much I get back.",
+      "field_responses": {
+        "identity": "You are Aarav Anderson, residing in Philadelphia 19031.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "My gift card.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "Change the desk lamp in #W9300146 to the cheapest available desk lamp. Put any refund onto my gift card and tell me how much I get back.",
+        "exchange_options": "Change the desk lamp in #W9300146 to the cheapest available desk lamp. Put any refund onto my gift card and tell me how much I get back.",
+        "return_items": "Change the desk lamp in #W9300146 to the cheapest available desk lamp. Put any refund onto my gift card and tell me how much I get back."
+      }
+    },
+    {
+      "id": "49",
+      "category": "legal_write",
+      "user_id": "aarav_anderson_8794",
+      "opening": "I mistakenly bought IPX7 wireless earbuds. Exchange those for the cheapest earbud variant among the other earbuds in that same order, matching that pair’s water resistance.",
+      "field_responses": {
+        "identity": "You are Aarav Anderson, residing in Philadelphia 19031.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "I mistakenly bought IPX7 wireless earbuds. Exchange those for the cheapest earbud variant among the other earbuds in that same order, matching that pair’s water resistance.",
+        "exchange_options": "I mistakenly bought IPX7 wireless earbuds. Exchange those for the cheapest earbud variant among the other earbuds in that same order, matching that pair’s water resistance.",
+        "return_items": "I mistakenly bought IPX7 wireless earbuds. Exchange those for the cheapest earbud variant among the other earbuds in that same order, matching that pair’s water resistance."
+      }
+    },
+    {
+      "id": "70",
+      "category": "legal_write",
+      "user_id": "sofia_hernandez_5364",
+      "opening": "Exchange the helmet I received to medium and high ventilation. Prefer blue if available. Use the original payment method and tell me the price difference due.",
+      "field_responses": {
+        "identity": "You name is Sofia Hernandez and your zip code is 98193.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "Exchange the helmet I received to medium and high ventilation. Prefer blue if available. Use the original payment method and tell me the price difference due.",
+        "exchange_options": "Exchange the helmet I received to medium and high ventilation. Prefer blue if available. Use the original payment method and tell me the price difference due.",
+        "return_items": "Exchange the helmet I received to medium and high ventilation. Prefer blue if available. Use the original payment method and tell me the price difference due."
+      }
+    },
+    {
+      "id": "94",
+      "category": "legal_write",
+      "user_id": "lei_wilson_4541",
+      "opening": "Exchange a laptop I received to i7, 8GB RAM and 1TB SSD.",
+      "field_responses": {
+        "identity": "You name is Lei Wilson and your zip code is 32255.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "The 15-inch laptop with 16GB RAM.",
+        "exchange_options": "Exchange a laptop I received to i7, 8GB RAM and 1TB SSD.",
+        "return_items": "Exchange a laptop I received to i7, 8GB RAM and 1TB SSD."
+      }
+    },
+    {
+      "id": "95",
+      "category": "legal_write",
+      "user_id": "lei_wilson_4541",
+      "opening": "Exchange the laptop I received to i7, 8GB RAM and 1TB SSD. Tell me the individual differences and total amount due.",
+      "field_responses": {
+        "identity": "You name is Lei Wilson and your zip code is 32255.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "Actually both 15-inch laptops, in the two orders.",
+        "exchange_options": "Exchange the laptop I received to i7, 8GB RAM and 1TB SSD. Tell me the individual differences and total amount due.",
+        "return_items": "Exchange the laptop I received to i7, 8GB RAM and 1TB SSD. Tell me the individual differences and total amount due."
+      }
+    },
+    {
+      "id": "100",
+      "category": "legal_write",
+      "user_id": "liam_thomas_7882",
+      "opening": "Return my luggage set for the exact same type in red, and my skateboard in the same order for 34-inch custom. If these are still pending, modify that order instead, using my credit card. Also return my hiking boots.",
+      "field_responses": {
+        "identity": "You name is Liam Thomas and your zip code is 85049.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "My credit card for the pending modification; original method for the boots return.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "Return my luggage set for the exact same type in red, and my skateboard in the same order for 34-inch custom. If these are still pending, modify that order instead, using my credit card. Also return my hiking boots.",
+        "exchange_options": "Return my luggage set for the exact same type in red, and my skateboard in the same order for 34-inch custom. If these are still pending, modify that order instead, using my credit card. Also return my hiking boots.",
+        "return_items": "Only the hiking boots."
+      }
+    },
+    {
+      "id": "66",
+      "category": "legal_write",
+      "user_id": "aarav_lee_1982",
+      "opening": "Change my luggage set to a coat. If that cannot be done, return that item; if that is also impossible, cancel the whole order.",
+      "field_responses": {
+        "identity": "You are Aarav Lee. You live in Phoenix, AZ 85025.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "Change my luggage set to a coat. If that cannot be done, return that item; if that is also impossible, cancel the whole order.",
+        "exchange_options": "Change my luggage set to a coat. If that cannot be done, return that item; if that is also impossible, cancel the whole order.",
+        "return_items": "Change my luggage set to a coat. If that cannot be done, return that item; if that is also impossible, cancel the whole order.",
+        "cancel_reason": "I no longer need it."
+      }
+    },
+    {
+      "id": "16",
+      "category": "legal_write",
+      "user_id": "fatima_johnson_7581",
+      "opening": "Cancel all pending orders because I no longer need them. Return only the smart watch I received, nothing else. Tell me the total amount I can get back.",
+      "field_responses": {
+        "identity": "You are Fatima Johnson in zipcode 78712.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "Cancel all pending orders because I no longer need them. Return only the smart watch I received, nothing else. Tell me the total amount I can get back.",
+        "exchange_options": "Cancel all pending orders because I no longer need them. Return only the smart watch I received, nothing else. Tell me the total amount I can get back.",
+        "return_items": "Only the smart watch.",
+        "cancel_reason": "I no longer need them."
+      }
+    },
+    {
+      "id": "30",
+      "category": "legal_write",
+      "user_id": "olivia_lopez_3865",
+      "opening": "My tablet arrived damaged. First tell me its tracking number. Exchange for the same item if possible; if unavailable, return it and cancel the charger I just bought for it. Finally return my sneakers.",
+      "field_responses": {
+        "identity": "You are Olivia Lopez, and you live in Texas in zipcode 76171.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "My tablet arrived damaged. First tell me its tracking number. Exchange for the same item if possible; if unavailable, return it and cancel the charger I just bought for it. Finally return my sneakers.",
+        "exchange_options": "My tablet arrived damaged. First tell me its tracking number. Exchange for the same item if possible; if unavailable, return it and cancel the charger I just bought for it. Finally return my sneakers.",
+        "return_items": "The tablet and sneakers.",
+        "cancel_reason": "I no longer need the charger."
+      }
+    },
+    {
+      "id": "31",
+      "category": "legal_write",
+      "user_id": "olivia_lopez_3865",
+      "opening": "I lost the tablet I received. Tell me the tracking number and whether you can refund or reorder it. If not, cancel the charger bought for it. Cancel only the boots and keep the kettle; if partial cancellation is impossible, leave that order alone. Finally return my sneakers.",
+      "field_responses": {
+        "identity": "You are Olivia Lopez, and you live in Texas in zipcode 76171.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "I lost the tablet I received. Tell me the tracking number and whether you can refund or reorder it. If not, cancel the charger bought for it. Cancel only the boots and keep the kettle; if partial cancellation is impossible, leave that order alone. Finally return my sneakers.",
+        "exchange_options": "I lost the tablet I received. Tell me the tracking number and whether you can refund or reorder it. If not, cancel the charger bought for it. Cancel only the boots and keep the kettle; if partial cancellation is impossible, leave that order alone. Finally return my sneakers.",
+        "return_items": "Only the sneakers.",
+        "cancel_reason": "I no longer need those orders."
+      }
+    },
+    {
+      "id": "32",
+      "category": "legal_write",
+      "user_id": "olivia_lopez_3865",
+      "opening": "I lost the tablet I received. Tell me the tracking number and whether you can refund or reorder it. If not, cancel the charger bought for it. Also cancel both the boots and kettle. Finally return my sneakers.",
+      "field_responses": {
+        "identity": "You are Olivia Lopez, and you live in Texas in zipcode 76171.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "I lost the tablet I received. Tell me the tracking number and whether you can refund or reorder it. If not, cancel the charger bought for it. Also cancel both the boots and kettle. Finally return my sneakers.",
+        "exchange_options": "I lost the tablet I received. Tell me the tracking number and whether you can refund or reorder it. If not, cancel the charger bought for it. Also cancel both the boots and kettle. Finally return my sneakers.",
+        "return_items": "Only the sneakers.",
+        "cancel_reason": "I no longer need those orders."
+      }
+    },
+    {
+      "id": "54",
+      "category": "legal_write",
+      "user_id": "amelia_silva_7726",
+      "opening": "I have financial problems. Cancel or return all eligible orders, except keep my beloved boots. You may exchange boots for the cheapest cheaper pair of exactly the same size and material. If none is cheaper, leave the boots alone and handle the other items. Tell me the total refund amount.",
+      "field_responses": {
+        "identity": "You are Amelia, and you have two emails: silva7872@example.com and amelia.silva7872@example.com. You live in Philadelphia, and you are a loyal customer.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "I have financial problems. Cancel or return all eligible orders, except keep my beloved boots. You may exchange boots for the cheapest cheaper pair of exactly the same size and material. If none is cheaper, leave the boots alone and handle the other items. Tell me the total refund amount.",
+        "exchange_options": "I have financial problems. Cancel or return all eligible orders, except keep my beloved boots. You may exchange boots for the cheapest cheaper pair of exactly the same size and material. If none is cheaper, leave the boots alone and handle the other items. Tell me the total refund amount.",
+        "return_items": "Everything eligible except my hiking boots.",
+        "cancel_reason": "I no longer need the other orders."
+      }
+    },
+    {
+      "id": "76",
+      "category": "legal_write",
+      "user_id": "ava_nguyen_6646",
+      "opening": "Remove the fleece jacket I ordered by mistake; if removing one item is impossible, cancel that whole order as ordered by mistake. Modify my skateboard to maple, 34 inch, graphic; if unavailable, cancel that order as no longer needed. Also tell me the total paid for all grills in prior orders.",
+      "field_responses": {
+        "identity": "You name is Ava Nguyen and your zip code is 94128.",
+        "order": "I don't remember; please look through my orders.",
+        "payment_method": "The original payment method.",
+        "refund_method": "The original payment method.",
+        "exchange_items": "Remove the fleece jacket I ordered by mistake; if removing one item is impossible, cancel that whole order as ordered by mistake. Modify my skateboard to maple, 34 inch, graphic; if unavailable, cancel that order as no longer needed. Also tell me the total paid for all grills in prior orders.",
+        "exchange_options": "Remove the fleece jacket I ordered by mistake; if removing one item is impossible, cancel that whole order as ordered by mistake. Modify my skateboard to maple, 34 inch, graphic; if unavailable, cancel that order as no longer needed. Also tell me the total paid for all grills in prior orders.",
+        "return_items": "Remove the fleece jacket I ordered by mistake; if removing one item is impossible, cancel that whole order as ordered by mistake. Modify my skateboard to maple, 34 inch, graphic; if unavailable, cancel that order as no longer needed. Also tell me the total paid for all grills in prior orders.",
+        "cancel_reason": "Jacket order: ordered by mistake. Skateboard order: no longer needed."
+      }
+    }
+  ],
+  "execution": {
+    "base_url": "http://127.0.0.1:11434",
+    "model": "qwen3:4b-instruct-2507-q4_K_M",
+    "temperature": 0,
+    "seed": 42,
+    "num_ctx": 8192,
+    "num_predict": 768,
+    "request_timeout_seconds": 120,
+    "max_model_calls_per_turn": 12,
+    "max_model_calls_per_episode": 24,
+    "max_user_turns_per_episode": 10,
+    "max_episode_seconds": 900,
+    "concurrency": 1,
+    "return_receipt_response": true,
+    "isolated_information_repair": true,
+    "isolated_proposal_repair": true,
+    "cancel_goal_tracking": true,
+    "cancel_goal_activation": "explicit_all_pending"
+  },
+  "expected_model_digest": "0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0",
+  "pilot_task_ids": [
+    "tau-retail-2",
+    "tau-retail-24",
+    "tau-retail-48",
+    "tau-retail-50",
+    "tau-retail-69"
+  ],
+  "fault_overrides": {
+    "tau-retail-2": {
+      "tool": "get_product_details",
+      "occurrence": 1
+    },
+    "tau-retail-48": {
+      "tool": "get_order_details",
+      "occurrence": 1
+    },
+    "tau-retail-113": {
+      "tool": "get_user_details",
+      "occurrence": 1
+    }
+  },
+  "user_consent": {
+    "tau-retail-2": {
+      "tool": "return_delivered_order_items",
+      "include": [
+        "Vacuum Cleaner",
+        "Headphones",
+        "Smart Watch"
+      ]
+    },
+    "tau-retail-24": {
+      "tool": "cancel_pending_order",
+      "include": [
+        "Grill"
+      ]
+    },
+    "tau-retail-48": {
+      "tool": "return_delivered_order_items",
+      "include": [
+        "Air Purifier"
+      ]
+    },
+    "tau-retail-50": {
+      "tools": []
+    },
+    "tau-retail-69": {
+      "tools": [
+        "return_delivered_order_items",
+        "cancel_pending_order"
+      ],
+      "include": [
+        "Laptop"
+      ],
+      "cancel_reason": "no longer needed"
+    },
+    "tau-retail-73": {
+      "tool": "return_delivered_order_items",
+      "all": true,
+      "exclude": [
+        "Espresso Machine"
+      ]
+    },
+    "tau-retail-81": {
+      "tool": "cancel_pending_order",
+      "include": [
+        "Hiking Boots",
+        "Watch",
+        "Smart Watch",
+        "Keyboard",
+        "Charger",
+        "Jacket",
+        "Running Shoes"
+      ],
+      "cancel_reason": "no longer needed"
+    },
+    "tau-retail-92": {
+      "tool": "return_delivered_order_items",
+      "include": [
+        "Skateboard",
+        "Smart Watch",
+        "E-Reader"
+      ]
+    },
+    "tau-retail-113": {
+      "tool": "cancel_pending_order",
+      "all": true,
+      "cancel_reason": "ordered by mistake"
+    },
+    "tau-retail-51": {
+      "tool": "return_delivered_order_items",
+      "include": [
+        "Digital Camera"
+      ]
+    },
+    "tau-retail-53": {
+      "tool": "return_delivered_order_items",
+      "include": [
+        "Bicycle"
+      ]
+    },
+    "tau-retail-68": {
+      "tools": []
+    },
+    "tau-retail-108": {
+      "tool": "return_delivered_order_items",
+      "all": true,
+      "exclude": [
+        "Tablet"
+      ]
+    },
+    "tau-retail-10": {
+      "tools": []
+    },
+    "tau-retail-88": {
+      "tool": "cancel_pending_order",
+      "include": [
+        "Bookshelf"
+      ],
+      "cancel_reason": "ordered by mistake"
+    },
+    "tau-retail-89": {
+      "tool": "return_delivered_order_items",
+      "include": [
+        "Mechanical Keyboard"
+      ]
+    },
+    "tau-retail-90": {
+      "tool": "cancel_pending_order",
+      "include": [
+        "Digital Camera"
+      ],
+      "cancel_reason": "ordered by mistake"
+    },
+    "tau-retail-11": {
+      "tool": "return_delivered_order_items",
+      "all": true
+    },
+    "tau-retail-13": {
+      "tool": "return_delivered_order_items",
+      "all": true,
+      "exclude": [
+        "Mechanical Keyboard",
+        "Gaming Mouse"
+      ]
+    },
+    "tau-retail-14": {
+      "tool": "return_delivered_order_items",
+      "include": [
+        "Mechanical Keyboard",
+        "Gaming Mouse"
+      ]
+    },
+    "tau-retail-0": {
+      "tool": "exchange_delivered_order_items",
+      "include": [
+        "Mechanical Keyboard",
+        "Smart Thermostat"
+      ],
+      "exchange_required_names": [
+        "Mechanical Keyboard",
+        "Smart Thermostat"
+      ],
+      "exchange_options": {
+        "Mechanical Keyboard": {
+          "switch type": "clicky",
+          "size": "full size",
+          "backlight": "none"
+        },
+        "Smart Thermostat": {
+          "compatibility": "Google Assistant"
+        }
+      },
+      "exchange_old_options": {}
+    },
+    "tau-retail-1": {
+      "tool": "exchange_delivered_order_items",
+      "include": [
+        "Smart Thermostat"
+      ],
+      "exchange_required_names": [
+        "Smart Thermostat"
+      ],
+      "exchange_options": {
+        "Smart Thermostat": {
+          "compatibility": "Google Assistant"
+        }
+      },
+      "exchange_old_options": {}
+    },
+    "tau-retail-75": {
+      "tool": "exchange_delivered_order_items",
+      "include": [
+        "Wireless Earbuds"
+      ],
+      "exchange_required_names": [
+        "Wireless Earbuds"
+      ],
+      "exchange_options": {
+        "Wireless Earbuds": {
+          "color": "black",
+          "battery life": "4 hours",
+          "water resistance": "not resistant"
+        }
+      },
+      "exchange_old_options": {}
+    },
+    "tau-retail-77": {
+      "tool": "exchange_delivered_order_items",
+      "include": [
+        "Perfume"
+      ],
+      "exchange_required_names": [
+        "Perfume"
+      ],
+      "exchange_options": {
+        "Perfume": {
+          "scent family": "woody",
+          "gender": "men",
+          "size": "100ml"
+        }
+      },
+      "exchange_old_options": {}
+    },
+    "tau-retail-80": {
+      "tool": "exchange_delivered_order_items",
+      "include": [
+        "T-Shirt"
+      ],
+      "exchange_required_names": [
+        "T-Shirt"
+      ],
+      "exchange_options": {
+        "T-Shirt": {
+          "color": "red",
+          "size": "XXL",
+          "material": "cotton",
+          "style": "crew neck"
+        }
+      },
+      "exchange_old_options": {},
+      "exchange_payment_source": "gift_card"
+    },
+    "tau-retail-93": {
+      "tool": "exchange_delivered_order_items",
+      "include": [
+        "Laptop"
+      ],
+      "exchange_required_names": [
+        "Laptop"
+      ],
+      "exchange_options": {
+        "Laptop": {
+          "processor": "i7",
+          "ram": "8GB",
+          "storage": "1TB SSD"
+        }
+      },
+      "exchange_old_options": {
+        "Laptop": {
+          "screen size": "15-inch",
+          "ram": "32GB"
+        }
+      }
+    },
+    "tau-retail-106": {
+      "tool": "exchange_delivered_order_items",
+      "include": [
+        "T-Shirt"
+      ],
+      "exchange_required_names": [
+        "T-Shirt"
+      ],
+      "exchange_options": {
+        "T-Shirt": {
+          "size": "XL",
+          "material": "cotton",
+          "color": "black"
+        }
+      },
+      "exchange_old_options": {}
+    },
+    "tau-retail-3": {
+      "tool": "modify_pending_order_items",
+      "include": [
+        "T-Shirt"
+      ],
+      "exchange_requirements": [
+        {
+          "name": "T-Shirt",
+          "new_options": {
+            "color": "purple",
+            "size": "S",
+            "material": "polyester",
+            "style": "v-neck"
+          },
+          "old_options": {
+            "size": "S"
+          }
+        }
+      ]
+    },
+    "tau-retail-4": {
+      "tool": "modify_pending_order_items",
+      "include": [
+        "T-Shirt"
+      ],
+      "exchange_requirements": [
+        {
+          "name": "T-Shirt",
+          "new_options": {
+            "color": "purple",
+            "size": "S",
+            "material": "polyester",
+            "style": "v-neck"
+          },
+          "old_options": {}
+        }
+      ]
+    },
+    "tau-retail-6": {
+      "tool": "exchange_delivered_order_items",
+      "include": [
+        "Desk Lamp"
+      ],
+      "exchange_requirements": [
+        {
+          "name": "Desk Lamp",
+          "new_options": {
+            "brightness": "low",
+            "power source": "battery"
+          },
+          "old_options": {}
+        }
+      ]
+    },
+    "tau-retail-7": {
+      "tool": "exchange_delivered_order_items",
+      "include": [
+        "Desk Lamp"
+      ],
+      "exchange_requirements": [
+        {
+          "name": "Desk Lamp",
+          "new_options": {
+            "brightness": "low",
+            "power source": "AC adapter"
+          },
+          "old_options": {}
+        }
+      ]
+    },
+    "tau-retail-9": {
+      "tool": "exchange_delivered_order_items",
+      "include": [
+        "Desk Lamp"
+      ],
+      "exchange_requirements": [
+        {
+          "name": "Desk Lamp",
+          "new_options": {
+            "brightness": "high",
+            "power source": "AC adapter"
+          },
+          "old_options": {}
+        }
+      ]
+    },
+    "tau-retail-5": {
+      "tool": "return_delivered_order_items",
+      "include": [
+        "Water Bottle"
+      ]
+    },
+    "tau-retail-12": {},
+    "tau-retail-19": {
+      "tool": "return_delivered_order_items",
+      "include": [
+        "Water Bottle"
+      ]
+    },
+    "tau-retail-20": {
+      "tool": "modify_pending_order_items",
+      "include": [
+        "Water Bottle",
+        "Mechanical Keyboard",
+        "Running Shoes",
+        "Makeup Kit"
+      ],
+      "exchange_requirements": [
+        {
+          "name": "Water Bottle",
+          "new_options": {
+            "capacity": "750ml",
+            "material": "glass",
+            "color": "black"
+          },
+          "old_options": {}
+        },
+        {
+          "name": "Mechanical Keyboard",
+          "new_options": {
+            "switch type": "linear",
+            "backlight": "RGB",
+            "size": "full size"
+          },
+          "old_options": {}
+        },
+        {
+          "name": "Running Shoes",
+          "new_options": {
+            "size": "9",
+            "color": "black",
+            "material": "synthetic",
+            "sole": "rubber"
+          },
+          "old_options": {}
+        },
+        {
+          "name": "Makeup Kit",
+          "new_options": {
+            "skin tone": "medium",
+            "kit size": "professional",
+            "brand": "Brand A"
+          },
+          "old_options": {}
+        }
+      ],
+      "exchange_payment_source": "gift_card"
+    },
+    "tau-retail-23": {
+      "by_tool": {
+        "exchange_delivered_order_items": {
+          "by_order": {
+            "#W3947049": {
+              "tool": "exchange_delivered_order_items",
+              "include": [
+                "Cycling Helmet"
+              ],
+              "exchange_requirements": [
+                {
+                  "name": "Cycling Helmet",
+                  "new_options": {
+                    "size": "M",
+                    "color": "red",
+                    "ventilation": "high"
+                  },
+                  "old_options": {}
+                }
+              ]
+            },
+            "#W6876713": {
+              "tool": "exchange_delivered_order_items",
+              "include": [
+                "Luggage Set"
+              ],
+              "exchange_requirements": [
+                {
+                  "name": "Luggage Set",
+                  "new_options": {
+                    "piece count": "2-piece",
+                    "color": "black",
+                    "material": "softshell"
+                  },
+                  "old_options": {}
+                }
+              ]
+            }
+          }
+        },
+        "modify_pending_order_items": {
+          "tool": "modify_pending_order_items",
+          "include": [
+            "Grill"
+          ],
+          "exchange_requirements": [
+            {
+              "name": "Grill",
+              "new_options": {
+                "type": "charcoal",
+                "size": "medium",
+                "features": "rotisserie"
+              },
+              "old_options": {}
+            }
+          ]
+        }
+      }
+    },
+    "tau-retail-27": {
+      "tool": "exchange_delivered_order_items",
+      "include": [
+        "Hiking Boots"
+      ],
+      "exchange_requirements": [
+        {
+          "name": "Hiking Boots",
+          "new_options": {
+            "size": "12",
+            "material": "leather",
+            "waterproof": "yes"
+          },
+          "old_options": {}
+        }
+      ]
+    },
+    "tau-retail-29": {
+      "tool": "exchange_delivered_order_items",
+      "by_order": {
+        "#W3792453": {
+          "tool": "exchange_delivered_order_items",
+          "include": [
+            "Skateboard"
+          ],
+          "exchange_requirements": [
+            {
+              "name": "Skateboard",
+              "new_options": {
+                "length": "28 inch",
+                "deck material": "bamboo",
+                "design": "plain"
+              },
+              "old_options": {}
+            }
+          ]
+        },
+        "#W7181492": {
+          "tool": "exchange_delivered_order_items",
+          "include": [
+            "Garden Hose"
+          ],
+          "exchange_requirements": [
+            {
+              "name": "Garden Hose",
+              "new_options": {
+                "length": "50ft",
+                "material": "vinyl",
+                "color": "black"
+              },
+              "old_options": {}
+            }
+          ]
+        }
+      },
+      "rejection_reply": "That is not the requested variant. For the hose, look again at my pending order; do not cancel it."
+    },
+    "tau-retail-35": {
+      "by_tool": {
+        "return_delivered_order_items": {
+          "include": [
+            "Bluetooth Speaker"
+          ],
+          "return_options": {
+            "Bluetooth Speaker": {
+              "water resistance": "no"
+            }
+          }
+        },
+        "modify_pending_order_items": {
+          "tool": "modify_pending_order_items",
+          "include": [
+            "Laptop"
+          ],
+          "exchange_requirements": [
+            {
+              "name": "Laptop",
+              "new_options": {
+                "screen size": "13-inch",
+                "processor": "i5",
+                "ram": "16GB",
+                "storage": "1TB SSD",
+                "color": "silver"
+              },
+              "old_options": {
+                "screen size": "17-inch"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "tau-retail-36": {
+      "tool": "modify_pending_order_items",
+      "include": [
+        "Action Camera",
+        "Desk Lamp",
+        "T-Shirt"
+      ],
+      "exchange_requirements": [
+        {
+          "name": "Action Camera",
+          "new_options": {
+            "resolution": "4K",
+            "waterproof": "yes",
+            "color": "black"
+          },
+          "old_options": {}
+        },
+        {
+          "name": "Desk Lamp",
+          "new_options": {
+            "color": "black",
+            "brightness": "medium",
+            "power source": "AC adapter"
+          },
+          "old_options": {}
+        },
+        {
+          "name": "T-Shirt",
+          "new_options": {
+            "color": "red",
+            "size": "L",
+            "material": "cotton",
+            "style": "v-neck"
+          },
+          "old_options": {}
+        }
+      ]
+    },
+    "tau-retail-38": {
+      "tool": "cancel_pending_order",
+      "all": true,
+      "cancel_reason": "no longer needed"
+    },
+    "tau-retail-44": {
+      "tool": "modify_pending_order_items",
+      "include": [
+        "Desk Lamp"
+      ],
+      "exchange_requirements": [
+        {
+          "name": "Desk Lamp",
+          "new_options": {
+            "color": "black",
+            "brightness": "medium",
+            "power source": "AC adapter"
+          },
+          "old_options": {}
+        }
+      ],
+      "exchange_payment_source": "gift_card"
+    },
+    "tau-retail-49": {
+      "tool": "exchange_delivered_order_items",
+      "include": [
+        "Wireless Earbuds"
+      ],
+      "exchange_requirements": [
+        {
+          "name": "Wireless Earbuds",
+          "new_options": {
+            "color": "blue",
+            "battery life": "6 hours",
+            "water resistance": "IPX4"
+          },
+          "old_options": {
+            "water resistance": "IPX7"
+          }
+        }
+      ]
+    },
+    "tau-retail-70": {
+      "tool": "exchange_delivered_order_items",
+      "include": [
+        "Cycling Helmet"
+      ],
+      "exchange_requirements": [
+        {
+          "name": "Cycling Helmet",
+          "new_options": {
+            "size": "M",
+            "color": "blue",
+            "ventilation": "high"
+          },
+          "old_options": {}
+        }
+      ]
+    },
+    "tau-retail-94": {
+      "tool": "exchange_delivered_order_items",
+      "include": [
+        "Laptop"
+      ],
+      "exchange_requirements": [
+        {
+          "name": "Laptop",
+          "new_options": {
+            "processor": "i7",
+            "ram": "8GB",
+            "storage": "1TB SSD"
+          },
+          "old_options": {
+            "screen size": "15-inch",
+            "ram": "16GB"
+          }
+        }
+      ]
+    },
+    "tau-retail-95": {
+      "tool": "exchange_delivered_order_items",
+      "include": [
+        "Laptop"
+      ],
+      "exchange_requirements": [
+        {
+          "name": "Laptop",
+          "new_options": {
+            "processor": "i7",
+            "ram": "8GB",
+            "storage": "1TB SSD"
+          },
+          "old_options": {
+            "screen size": "15-inch"
+          }
+        }
+      ]
+    },
+    "tau-retail-100": {
+      "by_tool": {
+        "modify_pending_order_items": {
+          "tool": "modify_pending_order_items",
+          "include": [
+            "Luggage Set",
+            "Skateboard"
+          ],
+          "exchange_requirements": [
+            {
+              "name": "Luggage Set",
+              "new_options": {
+                "piece count": "2-piece",
+                "color": "red",
+                "material": "softshell"
+              },
+              "old_options": {}
+            },
+            {
+              "name": "Skateboard",
+              "new_options": {
+                "length": "34 inch",
+                "design": "custom"
+              },
+              "old_options": {}
+            }
+          ],
+          "exchange_payment_source": "credit_card"
+        },
+        "return_delivered_order_items": {
+          "include": [
+            "Hiking Boots"
+          ]
+        }
+      }
+    },
+    "tau-retail-66": {
+      "tool": "cancel_pending_order",
+      "include": [
+        "Luggage Set"
+      ],
+      "cancel_reason": "no longer needed"
+    },
+    "tau-retail-16": {
+      "by_tool": {
+        "cancel_pending_order": {
+          "all": true,
+          "cancel_reason": "no longer needed"
+        },
+        "return_delivered_order_items": {
+          "include": [
+            "Smart Watch"
+          ]
+        }
+      }
+    },
+    "tau-retail-30": {
+      "by_tool": {
+        "return_delivered_order_items": {
+          "include": [
+            "Tablet",
+            "Sneakers"
+          ]
+        },
+        "cancel_pending_order": {
+          "include": [
+            "Portable Charger"
+          ],
+          "cancel_reason": "no longer needed"
+        }
+      }
+    },
+    "tau-retail-31": {
+      "by_tool": {
+        "cancel_pending_order": {
+          "include": [
+            "Portable Charger"
+          ],
+          "cancel_reason": "no longer needed"
+        },
+        "return_delivered_order_items": {
+          "include": [
+            "Sneakers"
+          ]
+        }
+      }
+    },
+    "tau-retail-32": {
+      "by_tool": {
+        "cancel_pending_order": {
+          "include": [
+            "Portable Charger",
+            "Hiking Boots",
+            "Electric Kettle"
+          ],
+          "cancel_reason": "no longer needed"
+        },
+        "return_delivered_order_items": {
+          "include": [
+            "Sneakers"
+          ]
+        }
+      }
+    },
+    "tau-retail-54": {
+      "by_tool": {
+        "cancel_pending_order": {
+          "all": true,
+          "cancel_reason": "no longer needed"
+        },
+        "return_delivered_order_items": {
+          "all": true,
+          "exclude": [
+            "Hiking Boots"
+          ]
+        }
+      }
+    },
+    "tau-retail-76": {
+      "tool": "cancel_pending_order",
+      "by_order": {
+        "#W8367380": {
+          "include": [
+            "Fleece Jacket"
+          ],
+          "cancel_reason": "ordered by mistake"
+        },
+        "#W1242543": {
+          "include": [
+            "Skateboard"
+          ],
+          "cancel_reason": "no longer needed"
+        }
+      }
+    }
+  },
+  "communication_review": {
+    "version": "t6-v1",
+    "method": "assistant-assisted offline semantic review; no model-judge API",
+    "criteria": [
+      "All requested facts or actions are communicated accurately.",
+      "No unsupported success claim or completed-refund claim.",
+      "Partial completion, refusal, or handoff is explained truthfully.",
+      "The review cannot override failed state, confirmation, or side-effect checks."
+    ]
+  },
+  "experiment_version": "coverage-20261118",
+  "evaluation_scope": "Dev development; previously observed Test may only be used as seen-task regression, never an unseen score.",
+  "user_script_overrides": {
+    "tau-retail-24": {
+      "cancel_reason": "I ordered it by mistake."
+    },
+    "tau-retail-48": {
+      "identity": "My name is Daiki Johnson, ZIP 80273."
+    },
+    "tau-retail-69": {
+      "identity": "My name is Emma Smith, ZIP 10192."
+    }
+  },
+  "script_revision_notes": {
+    "24": "Upstream user instructions permit making up a cancellation reason. Register one fixed reply, only when asked.",
+    "48/69": "Expand upstream username identity to the name and ZIP verified from its source database profile, only when identity is requested.",
+    "73": "Coffee machine in the user request refers to the sole Espresso Machine in this order. Correct consent exclusion; keep gold item IDs unchanged."
+  },
+  "budget_revision_note": "Single-turn limit 6 -> 12: identity lookup + profile + three order reads + proposal already requires 6 native tool calls before the final answer; observed Dev48 stopped before its proposal. Episode cap remains 24 model calls / 10 user events / 900 seconds. Not a budget-matched comparison with historical runs.",
+  "revision_note": "Broader local derived tasks with grouped local split preserving source_split. Upstream local item mutation patch disclosed. No claim of80 tasks, unseen Test or model success for reference checks.",
+  "output_root": "data/versions/t4-coverage-v2",
+  "dataset_root": "data/versions/t4-coverage-v2",
+  "additional_tools": [
+    "exchange_delivered_order_items",
+    "modify_pending_order_items",
+    "calculate"
+  ],
+  "group_assignments": {
+    "amelia_gonzalez_4098": "dev",
+    "chen_smith_8425": "dev",
+    "daiki_johnson_9523": "dev",
+    "daiki_silva_2903": "dev",
+    "emma_smith_8564": "dev",
+    "fatima_wilson_7472": "dev",
+    "james_kim_7213": "dev",
+    "lei_wilson_4541": "dev",
+    "liam_moore_4057": "dev",
+    "mei_ahmed_4909": "dev",
+    "mia_garcia_4516": "dev",
+    "raj_santos_9079": "dev",
+    "sofia_hernandez_5364": "dev",
+    "sofia_thomas_1518": "dev",
+    "yara_muller_8652": "dev",
+    "yusuf_rossi_9620": "dev",
+    "emma_kovacs_9839": "test",
+    "ivan_johnson_6036": "test",
+    "noah_ito_3850": "test",
+    "sofia_li_9219": "test",
+    "yusuf_gonzalez_8900": "test",
+    "mei_kovacs_8020": "dev",
+    "mei_davis_8935": "dev",
+    "ethan_garcia_1261": "dev",
+    "isabella_johansson_2152": "dev",
+    "aarav_santos_2259": "dev",
+    "daiki_sanchez_3253": "test",
+    "aarav_anderson_8794": "dev",
+    "liam_thomas_7882": "test",
+    "aarav_lee_1982": "dev",
+    "fatima_johnson_7581": "dev",
+    "olivia_lopez_3865": "dev",
+    "amelia_silva_7726": "dev",
+    "ava_nguyen_6646": "dev"
+  }
+}

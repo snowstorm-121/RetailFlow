@@ -119,7 +119,7 @@ def test_text_confirmation_is_repaired_into_a_proposal_not_an_approval(tmp_path)
     assert result['request']['args']['reason'] == 'ordered by mistake'
     assert worker.environment.get_order('a', '#W5056519')['status'] == 'pending'
     assert result['usage']['dialogue_repairs'] == 1
-    assert len(model.bound_tools) == 10
+    assert len(model.bound_tools) == 12
 
 
 def test_empty_model_reply_is_not_reported_as_an_answer(tmp_path):
@@ -225,7 +225,7 @@ def test_proceed_confirmation_with_known_refund_method_requires_business_proposa
     result = asyncio.run(worker.run_turn('a', {'kind': 'message', 'text':
         'Yusuf Rossi, 19122. Return the vacuum cleaner in #W2378156 to the original payment method.'}, config))
     assert result['status'] == 'needs_confirmation'
-    assert len(model.bound_tools) == 10
+    assert len(model.bound_tools) == 12
     assert worker.environment.get_order('a', '#W2378156')['status'] == 'delivered'
 
 

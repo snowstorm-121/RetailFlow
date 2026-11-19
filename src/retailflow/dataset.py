@@ -25,7 +25,7 @@ ALLOWED_TOOLS = {
     "get_order_details", "get_product_details", "cancel_pending_order",
     "return_delivered_order_items", "transfer_to_human_agents",
 }
-WRITE_TOOLS = {"cancel_pending_order", "return_delivered_order_items", "exchange_delivered_order_items"}
+WRITE_TOOLS = {"cancel_pending_order", "return_delivered_order_items", "exchange_delivered_order_items", "modify_pending_order_items"}
 
 
 def _exchange_check(args, db):
@@ -48,6 +48,37 @@ def _exchange_check(args, db):
     return {"order_id": args["order_id"], "status": "exchange requested", "exchange_items": sorted(ids),
             "exchange_new_items": sorted(new_ids), "exchange_payment_method_id": args["payment_method_id"],
             "exchange_price_difference": difference}
+
+
+def _modification_check(args, db):
+    """Independent oracle from raw variants, not the tool's returned state."""
+    order = db["orders"][args["order_id"]]
+    if order["status"] != "pending":
+        raise ValueError("Modification requires pending order")
+    ids, new_ids = args["item_ids"], args["new_item_ids"]
+    if not ids or len(ids) != len(new_ids):
+        raise ValueError("Invalid modification item counts")
+    items = deepcopy(order["items"])
+    available = list(range(len(items)))
+    difference = 0
+    for old_id, new_id in zip(ids, new_ids):
+        index = next((i for i in available if order["items"][i]["item_id"] == old_id), None)
+        if index is None or old_id == new_id:
+            raise ValueError("Missing or unchanged modification item")
+        available.remove(index)
+        old = order["items"][index]
+        variant = db["products"][old["product_id"]]["variants"].get(new_id)
+        if not variant or not variant["available"]:
+            raise ValueError("Unavailable or cross-product modification")
+        difference += variant["price"] - old["price"]
+        items[index].update(item_id=new_id, price=variant["price"], options=deepcopy(variant["options"]))
+    method = db["users"][order["user_id"]]["payment_methods"].get(args["payment_method_id"])
+    if not method or (method["source"] == "gift_card" and method["balance"] < difference):
+        raise ValueError("Invalid modification payment method/balance")
+    payment = {"transaction_type": "payment" if difference > 0 else "refund",
+               "amount": abs(difference), "payment_method_id": args["payment_method_id"]}
+    return {"order_id": args["order_id"], "status": "pending (item modified)",
+            "items": items, "payment_history": deepcopy(order["payment_history"]) + [payment]}
 
 
 def _json_bytes(value):
@@ -90,17 +121,25 @@ def check_final_state(task: dict, before: dict, after: dict, events: list[dict])
         allowed = {"status", "cancel_reason", "payment_history"} if expected["status"] == "cancelled" else {"status", "return_items", "return_payment_method_id"}
         if expected["status"] == "exchange requested":
             allowed = {"status", "exchange_items", "exchange_new_items", "exchange_payment_method_id", "exchange_price_difference"}
+        if expected["status"] == "pending (item modified)":
+            allowed = {"status", "items", "payment_history"}
         if any(actual.get(key) != value for key, value in original.items() if key not in allowed) or set(actual) - set(original) - allowed:
             failures.append("target_extra_change")
         if expected["status"] == "cancelled":
             refunds = [{"transaction_type": "refund", "amount": p["amount"], "payment_method_id": p["payment_method_id"]} for p in original["payment_history"]]
             if actual["payment_history"] != original["payment_history"] + refunds:
                 failures.append("refund_mismatch")
-        elif actual["payment_history"] != original["payment_history"]:
+        elif expected["status"] != "pending (item modified)" and actual["payment_history"] != original["payment_history"]:
             failures.append("unexpected_payment_change")
     expected_users = deepcopy(before["users"])
     user_id = task["group_id"].removeprefix("source-user:")
     for expected in checks["orders"]:
+        if expected["status"] == "pending (item modified)":
+            payment = expected["payment_history"][-1]
+            method = expected_users[user_id]["payment_methods"][payment["payment_method_id"]]
+            if method["source"] == "gift_card":
+                sign = -1 if payment["transaction_type"] == "payment" else 1
+                method["balance"] = round(method["balance"] + sign * payment["amount"], 2)
         if expected["status"] != "cancelled":
             continue
         for payment in before["orders"][expected["order_id"]]["payment_history"]:
@@ -109,6 +148,11 @@ def check_final_state(task: dict, before: dict, after: dict, events: list[dict])
                 method["balance"] = round(method["balance"] + payment["amount"], 2)
     if after["users"] != expected_users:
         failures.append("user_side_effect_or_refund_mismatch")
+    required_rules = set(task.get("script", {}).get("required_proposal_rules", []))
+    observed_rules = {index for event in events if event.get("type") == "user_revision"
+                      for index in event.get("rule_indices", [])}
+    if not required_rules <= observed_rules:
+        failures.append("missing_user_revision")
     confirmed = [e["order_id"] for e in events if e.get("type") == "confirmed_write"]
     if Counter(confirmed) != Counter(targets.keys()):
         failures.append("missing_confirmation")
@@ -139,6 +183,8 @@ def _make_task(source_task, chosen, split, db, db_hash):
             if order["status"] != "pending" or args["reason"] not in {"no longer needed", "ordered by mistake"}:
                 raise ValueError(f"task {source_task['id']}: invalid cancellation")
             writes.append({"order_id": args["order_id"], "status": "cancelled", "cancel_reason": args["reason"]})
+        elif action["name"] == "modify_pending_order_items":
+            writes.append(_modification_check(args, db))
         elif action["name"] == "exchange_delivered_order_items":
             writes.append(_exchange_check(args, db))
         else:
@@ -161,6 +207,8 @@ def _make_task(source_task, chosen, split, db, db_hash):
         "on_unknown": "script_unhandled",
         "terminal": "goal_complete_or_declined",
     }
+    if chosen.get("required_proposal_rules"):
+        script["required_proposal_rules"] = chosen["required_proposal_rules"]
     return {
         "task_id": f"tau-retail-{source_task['id']}",
         "group_id": f"source-user:{chosen['user_id']}",
@@ -207,7 +255,7 @@ def prepare_dataset(config: dict) -> dict:
         raise ValueError("duplicate upstream task IDs")
     chosen = config["selected_tasks"]
     additional = set(config.get("additional_tools", []))
-    if additional - {"exchange_delivered_order_items"}:
+    if additional - {"exchange_delivered_order_items", "modify_pending_order_items", "calculate"}:
         raise ValueError("Unsupported dataset tool extension")
     allowed_tools = ALLOWED_TOOLS | additional
     if len({entry["id"] for entry in chosen}) != len(chosen):
@@ -220,7 +268,13 @@ def prepare_dataset(config: dict) -> dict:
         if not all(a["name"] in allowed_tools for a in task["evaluation_criteria"].get("actions") or []):
             raise ValueError(f"task {entry['id']}: unsupported reference action")
         upstream_split = "train" if entry["id"] in split_ids["train"] else "test"
-        selected.append(_make_task(task, entry, upstream_split, db, db_hash))
+        derived = _make_task(task, entry, upstream_split, db, db_hash)
+        assignment = config.get("group_assignments", {}).get(entry["user_id"])
+        if assignment is not None:
+            if assignment not in {"dev", "test"}:
+                raise ValueError("Invalid group split")
+            derived["split"] = assignment
+        selected.append(derived)
     groups = {"dev": sorted({t["group_id"] for t in selected if t["split"] == "dev"}),
               "test": sorted({t["group_id"] for t in selected if t["split"] == "test"})}
     if set(groups["dev"]) & set(groups["test"]):
@@ -258,6 +312,9 @@ def prepare_dataset(config: dict) -> dict:
         "review_status": "assistant_source_and_static_checks_only; runtime_checker_pending_T3_T6",
     }
     files["data/manifests/dataset.json"] = _json_bytes(manifest)
+    if config.get("group_assignments"):
+        manifest["group_assignments"] = config["group_assignments"]
+        files["data/manifests/dataset.json"] = _json_bytes(manifest)
     if additional:
         manifest["additional_tools"] = sorted(additional)
         files["data/manifests/dataset.json"] = _json_bytes(manifest)
@@ -299,9 +356,11 @@ def validate_dataset(manifest_path: str) -> dict:
         for line in (root / f"data/derived/{split}.jsonl").read_text().splitlines():
             task = json.loads(line)
             tasks.append(task)
-            if task["split"] != split or task["source_split"] != ("train" if split == "dev" else "test"):
+            assignment = manifest.get("group_assignments", {}).get(task["group_id"].removeprefix("source-user:"))
+            expected_split = assignment or ("dev" if task["source_split"] == "train" else "test")
+            if task["split"] != split or expected_split != split:
                 errors.append(f"split mismatch: {task['task_id']}")
-            if task["source_task_id"] not in source_splits["train" if split == "dev" else "test"]:
+            if task["source_task_id"] not in source_splits.get(task["source_split"], []):
                 errors.append(f"upstream split mismatch: {task['task_id']}")
             if task["source_task_id"] not in source_tasks:
                 errors.append(f"missing source task: {task['task_id']}")
@@ -342,6 +401,14 @@ def validate_dataset(manifest_path: str) -> dict:
                     errors.append(f"invalid cancellation precondition: {task['task_id']}")
                 elif check["status"] == "return requested" and (order["status"] != "delivered" or not set(check["return_items"]) <= {i["item_id"] for i in order["items"]}):
                     errors.append(f"invalid return precondition: {task['task_id']}")
+                elif check["status"] == "pending (item modified)":
+                    try:
+                        action = next(a for a in source_task["evaluation_criteria"]["actions"]
+                                      if a["name"] == "modify_pending_order_items" and a["arguments"]["order_id"] == check["order_id"])
+                        if check != _modification_check(action["arguments"], db):
+                            errors.append(f"modification oracle mismatch: {task['task_id']}")
+                    except (StopIteration, ValueError, KeyError, TypeError):
+                        errors.append(f"invalid modification precondition: {task['task_id']}")
                 elif check["status"] == "exchange requested":
                     try:
                         action = next(a for a in source_task["evaluation_criteria"]["actions"]

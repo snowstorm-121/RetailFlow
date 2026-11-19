@@ -44,3 +44,9 @@
 - Application adapters add paired variant/price/payment display, existing confirmation and receipt protection, exchange outcome context, and private user preferences. Upstream exchange records a request and signed difference; it does not settle payment/refund or mutate gift-card balances.
 - `configs/exchange-evaluation.json` selects seven additional source tasks (0, 1, 75, 77, 80, 93, 106) on top of the reviewed 20-task version. New derived files live under `data/versions/t3-exchange-v1`; historical files remain intact. These are 27 local derived records, not 80 completed tasks or official benchmark results.
 - The final-state checker independently validates paired variants and price difference, unchanged unrelated data and payment history. User consent constraints are private and checked against visible proposal facts, not passed to the agent as answer IDs.
+
+## 2026-11-19: pending item modification and broader task coverage
+
+- The runtime copy of `modify_pending_order_items` resolves and consumes original item rows before changing IDs, then applies each replacement variant's own price and options. The raw vendor snapshot and its hashes remain intact.
+- RetailFlow implements bounded arithmetic locally for `calculate` and does not expose the upstream expression evaluator. Item modification records a simulated payment or refund and requires explicit confirmation.
+- The `t4-coverage-v2` task set retains source IDs and splits alongside the local account-group assignment. Local adapters and reference checks are documented in the coverage report.

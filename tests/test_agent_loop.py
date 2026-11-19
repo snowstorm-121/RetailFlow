@@ -44,7 +44,7 @@ def test_single_tool_result_and_answer_keep_call_id(tmp_path):
     ])
     result = asyncio.run(worker.run_turn("a", {"kind": "message", "text": "Find my account: Yara Muller, ZIP 85041."}, config))
     assert result["status"] == "answered"
-    assert len(model.bound_tools) == 10
+    assert len(model.bound_tools) == 12
     messages = worker.load_messages("a")
     tool = next(m for m in messages if isinstance(m, ToolMessage))
     assert tool.tool_call_id == "u1" and tool.name == "find_user_id_by_name_zip"
