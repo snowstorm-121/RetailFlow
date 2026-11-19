@@ -8,7 +8,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 VISIBLE_FIELDS = {"order_id", "user_id", "status", "items", "item_id", "product_id", "name",
                   "price", "quantity", "payment_methods", "payment_method_id", "payment_history",
                   "return_items", "return_payment_method_id", "cancel_reason", "balance", "address",
-                  "first_name", "last_name", "zip", "email", "fulfillments", "code", "ok",
+                  "first_name", "last_name", "zip", "address1", "address2", "city", "state", "country", "email", "fulfillments", "tracking_id", "code", "ok",
                   "proposal_id", "reason", "data", "orders", "order_summaries", "source", "id", "last_four",
                   "transaction_type", "amount", "variants", "options", "available", "message", "fields", "question",
                   "scope", "order_ids", "source_quote", "available_variant_count", "exchange_items",

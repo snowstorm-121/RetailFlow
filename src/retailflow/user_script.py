@@ -5,7 +5,7 @@ from copy import deepcopy
 
 def user_view(task: dict, field_responses: dict | None = None) -> dict:
     replies = field_responses or {}
-    if set(replies) - {"identity", "order", "cancel_reason", "return_items", "refund_method", "exchange_items", "exchange_options", "payment_method"}:
+    if set(replies) - {"identity", "order", "cancel_reason", "return_items", "refund_method", "exchange_items", "exchange_options", "payment_method", "address"}:
         raise ValueError("Unsupported user reply field")
     spec = deepcopy({key: task[key] for key in ("initial_user_message", "user_private_facts", "script")})
     spec["script"]["field_responses"].update(deepcopy(replies))
@@ -22,7 +22,7 @@ class ScriptedUser:
     def answer(self, request: dict) -> str:
         replies = []
         for field in request["fields"]:
-            if field not in {"identity", "order", "cancel_reason", "return_items", "refund_method", "exchange_items", "exchange_options", "payment_method"}:
+            if field not in {"identity", "order", "cancel_reason", "return_items", "refund_method", "exchange_items", "exchange_options", "payment_method", "address"}:
                 raise ValueError(f"script_unhandled: unsupported field {field}")
             value = self.spec["script"]["field_responses"].get(field)
             if not value:
@@ -41,7 +41,7 @@ class ScriptedUser:
         if not display:
             raise ValueError("script_unhandled: proposal has no user-visible item details")
         args = proposal["args"]
-        items = display["items"]
+        items = display.get("items", [])
         names = {item["name"].casefold() for item in items}
         for index, rule in enumerate(self.spec["script"]["proposal_rules"]):
             if index in self.used_rules or rule["tool"] != proposal["name"]:
@@ -54,6 +54,9 @@ class ScriptedUser:
             if rule["decision"] == "decline":
                 self.consent = {}
             return False, rule["reply"]
+        if "approved_reference_actions" in self.consent:
+            return any(proposal["name"] == action["name"] and args == action["arguments"]
+                       for action in self.consent["approved_reference_actions"]), None
         consent = self.consent
         if "by_tool" in consent:
             consent = consent["by_tool"].get(proposal["name"], {})

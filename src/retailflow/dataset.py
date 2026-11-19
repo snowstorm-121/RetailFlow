@@ -6,6 +6,8 @@ from copy import deepcopy
 from collections import Counter
 from pathlib import Path
 
+from retailflow.tools import ADDRESS_FIELDS, ADDRESS_TOOLS, valid_arguments
+
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE_FILES = (
@@ -25,7 +27,8 @@ ALLOWED_TOOLS = {
     "get_order_details", "get_product_details", "cancel_pending_order",
     "return_delivered_order_items", "transfer_to_human_agents",
 }
-WRITE_TOOLS = {"cancel_pending_order", "return_delivered_order_items", "exchange_delivered_order_items", "modify_pending_order_items"}
+
+WRITE_TOOLS = ADDRESS_TOOLS | {"cancel_pending_order", "return_delivered_order_items", "exchange_delivered_order_items", "modify_pending_order_items"}
 
 
 def _exchange_check(args, db):
@@ -104,6 +107,14 @@ def check_final_state(task: dict, before: dict, after: dict, events: list[dict])
     failures = []
     checks = task["expected_checks"]
     targets = {check["order_id"]: check for check in checks["orders"]}
+    non_address_targets = set(targets)
+    address_actions = checks.get("address_actions", [])
+    for action in address_actions:
+        args = action["arguments"]
+        if "order_id" in args:
+            order_id = args["order_id"]
+            targets[order_id] = {**targets.get(order_id, {"order_id": order_id, "status": before["orders"][order_id]["status"]}),
+                                 "address": {key: args[key] for key in ADDRESS_FIELDS}}
     if before["products"] != after["products"]:
         failures.append("product_side_effect")
     if before["orders"].keys() != after["orders"].keys():
@@ -123,6 +134,10 @@ def check_final_state(task: dict, before: dict, after: dict, events: list[dict])
             allowed = {"status", "exchange_items", "exchange_new_items", "exchange_payment_method_id", "exchange_price_difference"}
         if expected["status"] == "pending (item modified)":
             allowed = {"status", "items", "payment_history"}
+        if order_id not in non_address_targets:
+            allowed = {"address"}
+        elif "address" in expected:
+            allowed.add("address")
         if any(actual.get(key) != value for key, value in original.items() if key not in allowed) or set(actual) - set(original) - allowed:
             failures.append("target_extra_change")
         if expected["status"] == "cancelled":
@@ -146,6 +161,10 @@ def check_final_state(task: dict, before: dict, after: dict, events: list[dict])
             method = expected_users[user_id]["payment_methods"][payment["payment_method_id"]]
             if method["source"] == "gift_card":
                 method["balance"] = round(method["balance"] + payment["amount"], 2)
+    for action in address_actions:
+        args = action["arguments"]
+        if "user_id" in args:
+            expected_users[args["user_id"]]["address"] = {key: args[key] for key in ADDRESS_FIELDS}
     if after["users"] != expected_users:
         failures.append("user_side_effect_or_refund_mismatch")
     required_rules = set(task.get("script", {}).get("required_proposal_rules", []))
@@ -153,8 +172,11 @@ def check_final_state(task: dict, before: dict, after: dict, events: list[dict])
                       for index in event.get("rule_indices", [])}
     if not required_rules <= observed_rules:
         failures.append("missing_user_revision")
-    confirmed = [e["order_id"] for e in events if e.get("type") == "confirmed_write"]
-    if Counter(confirmed) != Counter(targets.keys()):
+    confirmed = [e for e in events if e.get("type") == "confirmed_write"]
+    confirmed_addresses = Counter((e["name"], _json_bytes(e["args"])) for e in confirmed if e.get("name") in ADDRESS_TOOLS)
+    required_addresses = Counter((a["name"], _json_bytes(a["arguments"])) for a in address_actions)
+    confirmed_orders = Counter(e["order_id"] for e in confirmed if e.get("name") not in ADDRESS_TOOLS)
+    if confirmed_addresses != required_addresses or confirmed_orders != Counter(o["order_id"] for o in checks["orders"]):
         failures.append("missing_confirmation")
     visible_text = " ".join(e.get("text", "") for e in events if e.get("type") == "assistant_message")
     if any(str(info).lower() not in visible_text.lower() for info in checks["communicate_info"]):
@@ -172,10 +194,20 @@ def _make_task(source_task, chosen, split, db, db_hash):
         if order_id and (order_id not in db["orders"] or db["orders"][order_id]["user_id"] != chosen["user_id"]):
             raise ValueError(f"task {source_task['id']}: referenced order belongs to another user or is missing")
     writes = []
+    address_actions = []
     for action in actions:
         if action["name"] not in WRITE_TOOLS:
             continue
         args = action["arguments"]
+        if action["name"] in ADDRESS_TOOLS:
+            if not valid_arguments(action["name"], args):
+                raise ValueError("Invalid reference address")
+            if "user_id" in args and args["user_id"] != chosen["user_id"]:
+                raise ValueError("Foreign account address")
+            if "order_id" in args and not db["orders"][args["order_id"]]["status"].startswith("pending"):
+                raise ValueError("Shipping address reference is not pending")
+            address_actions.append({"name": action["name"], "arguments": args})
+            continue
         order = db["orders"][args["order_id"]]
         if order["user_id"] != chosen["user_id"]:
             raise ValueError(f"task {source_task['id']}: order belongs to another user")
@@ -227,6 +259,7 @@ def _make_task(source_task, chosen, split, db, db_hash):
         "script": script,
         "expected_checks": {
             "orders": writes,
+            **({"address_actions": address_actions} if address_actions else {}),
             "communicate_info": criteria.get("communicate_info") or [],
             "transfer_to_human": any(a["name"] == "transfer_to_human_agents" for a in actions),
         },
@@ -255,7 +288,7 @@ def prepare_dataset(config: dict) -> dict:
         raise ValueError("duplicate upstream task IDs")
     chosen = config["selected_tasks"]
     additional = set(config.get("additional_tools", []))
-    if additional - {"exchange_delivered_order_items", "modify_pending_order_items", "calculate"}:
+    if additional - ADDRESS_TOOLS - {"exchange_delivered_order_items", "modify_pending_order_items", "calculate"}:
         raise ValueError("Unsupported dataset tool extension")
     allowed_tools = ALLOWED_TOOLS | additional
     if len({entry["id"] for entry in chosen}) != len(chosen):
@@ -368,7 +401,7 @@ def validate_dataset(manifest_path: str) -> dict:
                 errors.append(f"initial state mismatch: {task['task_id']}")
             script = task["script"]
             allowed_fields = {"identity", "order", "cancel_reason", "return_items", "refund_method",
-                              "exchange_items", "exchange_options", "payment_method"}
+                              "exchange_items", "exchange_options", "payment_method", "address"}
             if (not task["initial_user_message"] or not script["field_responses"].get("identity")
                     or set(script["field_responses"]) - allowed_fields
                     or script["on_unknown"] != "script_unhandled" or script["max_user_turns"] < 1):
@@ -389,6 +422,12 @@ def validate_dataset(manifest_path: str) -> dict:
                     errors.append(f"invalid proposal branch: {task['task_id']}")
             source_task = source_tasks.get(task["source_task_id"])
             if source_task:
+                address_actions = [{"name": a["name"], "arguments": a["arguments"]}
+                                   for a in source_task["evaluation_criteria"].get("actions") or [] if a["name"] in ADDRESS_TOOLS]
+                if task["expected_checks"].get("address_actions", []) != address_actions:
+                    errors.append(f"address reference mismatch: {task['task_id']}")
+                if any(a["arguments"].get("user_id", user_id) != user_id for a in address_actions):
+                    errors.append(f"foreign account address: {task['task_id']}")
                 for action in source_task["evaluation_criteria"].get("actions") or []:
                     order_id = action["arguments"].get("order_id")
                     if order_id and db["orders"].get(order_id, {}).get("user_id") != user_id:

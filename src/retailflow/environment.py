@@ -7,7 +7,7 @@ import uuid
 from pathlib import Path
 
 from retailflow.storage import Storage
-from retailflow.tools import IDENTITY_TOOLS, SCHEMAS, WRITE_TOOLS, invoke, valid_arguments
+from retailflow.tools import ADDRESS_TOOLS, IDENTITY_TOOLS, SCHEMAS, WRITE_TOOLS, invoke, valid_arguments
 from retailflow.upstream.data_model import RetailDB
 from retailflow.upstream.paths import RETAIL_DB_PATH
 
@@ -149,18 +149,24 @@ class RetailEnvironment:
             if pending and (changed_target or changed_profile or changed_write):
                 sql.execute("UPDATE sessions SET pending_json = NULL WHERE thread = ?", (thread_id,))
                 pending = None
-            if name in WRITE_TOOLS:
-                receipt = sql.execute("SELECT result_json FROM receipts WHERE thread = ? AND name = ? AND args_json = ?", (thread_id, name, arguments)).fetchone()
-                if receipt:
-                    return json.loads(receipt["result_json"])
             if name not in IDENTITY_TOOLS and not user_id:
                 return _result("AUTH_REQUIRED", "Locate the user by email or name and ZIP code first.")
-            if name == "get_user_details" and args["user_id"] != user_id:
-                return _result("POLICY_DENIED", "Only the authenticated user's profile can be read.")
+            if name in {"get_user_details", "modify_user_address"} and args["user_id"] != user_id:
+                return _result("POLICY_DENIED", "Only the authenticated user's profile can be accessed.")
             if "order_id" in args:
                 order = business["orders"].get(args["order_id"])
                 if order and order["user_id"] != user_id:
                     return _result("POLICY_DENIED", "This order belongs to another user.")
+            if name in WRITE_TOOLS and not pending:
+                receipt = sql.execute("SELECT result_json FROM receipts WHERE thread = ? AND name = ? AND args_json = ? ORDER BY rowid DESC LIMIT 1",
+                                      (thread_id, name, arguments)).fetchone()
+                if receipt:
+                    previous = json.loads(receipt["result_json"])
+                    if name not in ADDRESS_TOOLS:
+                        return previous
+                    target = order if "order_id" in args else business["users"][user_id]
+                    if target and target["address"] == previous["data"]["address"]:
+                        return previous
             snapshot = RetailDB.model_validate(business)
             if name in WRITE_TOOLS:
                 if not pending or not pending["confirmed"]:
@@ -172,25 +178,29 @@ class RetailEnvironment:
                         return _result("TOOL_ERROR", f"{type(exc).__name__}: {exc}")
                     if not pending:
                         pending = {"proposal_id": uuid.uuid4().hex, "name": name, "args": args, "confirmed": False, "created_at": time.time()}
-                        order = business["orders"][args["order_id"]]
-                        selected = args.get("item_ids")
-                        pending["display"] = {"items": [{"name": item["name"], "item_id": item["item_id"], "options": item["options"], "price": item["price"]}
-                                                          for item in order["items"] if selected is None or item["item_id"] in selected],
-                                              "all_items": [{"name": item["name"], "item_id": item["item_id"], "options": item["options"], "price": item["price"]} for item in order["items"]],
-                                              "original_payment_method_id": order["payment_history"][0]["payment_method_id"]}
-                        if name in {"exchange_delivered_order_items", "modify_pending_order_items"}:
-                            pairs = []
-                            for old_id, new_id in zip(args["item_ids"], args["new_item_ids"]):
-                                old = next(item for item in order["items"] if item["item_id"] == old_id)
-                                new = business["products"][old["product_id"]]["variants"][new_id]
-                                pairs.append({"name": old["name"], "old_item_id": old_id, "new_item_id": new_id,
-                                              "old_options": old["options"], "new_options": new["options"],
-                                              "old_price": old["price"], "new_price": new["price"]})
-                            pending["display"].update(exchange_pairs=pairs,
-                                price_difference=round(sum(p["new_price"] - p["old_price"] for p in pairs), 2),
-                                payment_method_id=args["payment_method_id"],
-                                payment_source=business["users"][user_id]["payment_methods"][args["payment_method_id"]]["source"],
-                                settlement_status="not_settled" if name == "exchange_delivered_order_items" else "simulated_payment_recorded_on_commit")
+                        if name in ADDRESS_TOOLS:
+                            target = business["orders"][args["order_id"]] if "order_id" in args else business["users"][user_id]
+                            pending["display"] = {"old_address": target["address"], "new_address": preview["address"]}
+                        else:
+                            order = business["orders"][args["order_id"]]
+                            selected = args.get("item_ids")
+                            pending["display"] = {"items": [{"name": item["name"], "item_id": item["item_id"], "options": item["options"], "price": item["price"]}
+                                                              for item in order["items"] if selected is None or item["item_id"] in selected],
+                                                  "all_items": [{"name": item["name"], "item_id": item["item_id"], "options": item["options"], "price": item["price"]} for item in order["items"]],
+                                                  "original_payment_method_id": order["payment_history"][0]["payment_method_id"]}
+                            if name in {"exchange_delivered_order_items", "modify_pending_order_items"}:
+                                pairs = []
+                                for old_id, new_id in zip(args["item_ids"], args["new_item_ids"]):
+                                    old = next(item for item in order["items"] if item["item_id"] == old_id)
+                                    new = business["products"][old["product_id"]]["variants"][new_id]
+                                    pairs.append({"name": old["name"], "old_item_id": old_id, "new_item_id": new_id,
+                                                  "old_options": old["options"], "new_options": new["options"],
+                                                  "old_price": old["price"], "new_price": new["price"]})
+                                pending["display"].update(exchange_pairs=pairs,
+                                    price_difference=round(sum(p["new_price"] - p["old_price"] for p in pairs), 2),
+                                    payment_method_id=args["payment_method_id"],
+                                    payment_source=business["users"][user_id]["payment_methods"][args["payment_method_id"]]["source"],
+                                    settlement_status="not_settled" if name == "exchange_delivered_order_items" else "simulated_payment_recorded_on_commit")
                         sql.execute("UPDATE sessions SET pending_json = ? WHERE thread = ?", (_json(pending), thread_id))
                     return {"ok": False, "code": "CONFIRMATION_REQUIRED", "proposal_id": pending["proposal_id"], "proposal": pending}
                 try:

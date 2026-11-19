@@ -25,11 +25,12 @@ from retailflow.upstream.paths import RETAIL_DB_PATH
 RETAIL_PROMPT = """You are a retail support agent. Current time: {system_time}.
 Use native tools, one at a time, until the customer's request is handled.
 Locate the user by email or name and ZIP before reading their data. Never invent identity or IDs.
-Use ask_user whenever customer information is missing. fields: identity, order, cancel_reason, return_items, refund_method, exchange_items, exchange_options, payment_method. Never ask a plain-text question.
+Use ask_user whenever customer information is missing. fields: identity, order, cancel_reason, return_items, refund_method, exchange_items, exchange_options, payment_method, address. Never ask a plain-text question.
 Use get_user_details to list orders, then get_order_details to inspect them. Search the listed orders until you find the requested items. The first order is not necessarily the right one. For requests covering multiple items or all orders, inspect the remaining listed orders before concluding that items or pending orders are absent. Do not ask the customer for IDs already available from tools.
 Preserve the leading # in every order ID. Read order details before proposing a write.
 CANCEL: status pending is eligible. Cancel the whole order, not individual items. Ask the customer for the reason if missing: 'ordered by mistake' or 'no longer needed'. Never guess a reason. Call cancel_pending_order to create a proposal.
 RETURN: status delivered is eligible for return. Select the requested item_ids from order details. Ask for refund_method if missing. Use the original payment_method_id or an existing gift card. Call return_delivered_order_items to create a proposal. After confirmation the status becomes return requested; a second return or amendment for that order is not allowed. The policy expects return instructions by email; this local environment sends no real email. A return request is not a settled refund; do not promise an unsupported return refund date.
+ADDRESS: distinguish shipping address from account default. Read the referenced owned order or profile to copy a known address; never guess missing address fields. Use ask_user for address only if missing. Stage each target separately; application confirmation is required.
 MODIFY: only pending orders; call modify_pending_order_items for available SAME-product replacements, pairing old/new IDs. Collect all changes first; item modification is allowed once and status becomes pending (item modified). Compute new total minus old total. A POSITIVE difference is owed and requires sufficient gift-card balance. A NEGATIVE difference is a refund: gift-card balance increases and need not cover the refund. Price differences are recorded in local payment history; gift-card balance is updated. No real payment is sent. Use exchange_items/exchange_options/payment_method to request missing preferences. Use calculate for monetary totals.
 EXCHANGE: only delivered orders. Read the order and product variants. Exchange to available variants of the SAME product; pair old and new item IDs in the same list positions. Collect all exchanges for that order before proposing: return or exchange is allowed only once. Use an existing user payment method for the difference; gift card must cover a positive difference. Ask for missing item preferences or payment_method. Call exchange_delivered_order_items to create a proposal. After confirmation the status is exchange requested, not a completed shipment or settled charge/refund. Positive price difference is owed; negative difference is a refund due; this local tool does not settle either or change gift-card balance.
 The first write-tool call creates a proposal without changing the order. The application obtains confirmation. Never ask for write confirmation in text, claim a proposal exists before a tool result, or claim a proposal is a completed operation.
@@ -136,10 +137,13 @@ class RetailRuntime:
                 messages.append(HumanMessage(content="I explicitly confirm the displayed proposal."))
                 action_name = pending["name"] if pending else "the previous action"
                 summary = {"name": action_name, "ok": outcome["ok"], "code": outcome["code"],
-                           "order_id": pending["args"]["order_id"] if pending else outcome.get("data", {}).get("order_id")}
+                           "order_id": pending["args"].get("order_id") if pending else outcome.get("data", {}).get("order_id")}
                 if isinstance(outcome.get("data"), dict):
                     summary["status"] = outcome["data"].get("status")
                     order = outcome["data"]
+                    if action_name in {"modify_pending_order_address", "modify_user_address"}:
+                        summary["updated_address"] = order["address"]
+                        summary["user_id"] = order.get("user_id")
                     if order.get("status") == "cancelled":
                         methods = self.environment.load_session(thread_id)["business"]["users"][order["user_id"]]["payment_methods"]
                         summary["refunds"] = [{**payment, "timing": "immediate" if
@@ -215,8 +219,8 @@ class RetailRuntime:
                     text = request["question"]
                 elif status == "needs_confirmation":
                     text = f"Confirm {request['name']} with {json.dumps(request['args'], ensure_ascii=False)}?"
-                    if request['name'] in {'exchange_delivered_order_items', 'modify_pending_order_items'}:
-                        text += " Exchange details: " + json.dumps(request['display'], ensure_ascii=False)
+                    if request['name'] in {'exchange_delivered_order_items', 'modify_pending_order_items', 'modify_pending_order_address', 'modify_user_address'}:
+                        text += " Proposal details: " + json.dumps(request['display'], ensure_ascii=False)
                 elif status == "refused":
                     text = json.loads(messages[-1].content).get("message", "The business policy refused this action.")
                 elif status == "handed_off":

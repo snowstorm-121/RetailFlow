@@ -50,3 +50,8 @@
 - The runtime copy of `modify_pending_order_items` resolves and consumes original item rows before changing IDs, then applies each replacement variant's own price and options. The raw vendor snapshot and its hashes remain intact.
 - RetailFlow implements bounded arithmetic locally for `calculate` and does not expose the upstream expression evaluator. Item modification records a simulated payment or refund and requires explicit confirmation.
 - The `t4-coverage-v2` task set retains source IDs and splits alongside the local account-group assignment. Local adapters and reference checks are documented in the coverage report.
+
+## Address expansion
+
+- RetailFlow exposes the existing pending-order shipping and user default address operations. The fixed upstream implementations are unchanged. The local dispatcher applies identity checks, confirmation and receipt handling to both operations.
+- The `t5-address-v1` dataset adds documented local adapters for 18 source tasks. The prior dataset versions and raw source hashes are preserved.

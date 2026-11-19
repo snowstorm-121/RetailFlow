@@ -58,7 +58,7 @@ def score_episode(task: dict, before: dict, after: dict, events: list[dict], sta
     state_passed = not state_failures and not policy_failures
     objective = state_passed and status in TERMINAL
     return {"task_id": task["task_id"], "category": task["category"], "status": status,
-            "requires_write": bool(task["expected_checks"]["orders"]), "success": False,
+            "requires_write": bool(task["expected_checks"]["orders"] or task["expected_checks"].get("address_actions")), "success": False,
             "objective_passed": objective, "state_passed": state_passed, "state_failures": state_failures,
             "policy_passed": not policy_failures, "policy_failures": policy_failures,
             "required_info_literal_match": "missing_communication" not in checked["failures"],
@@ -160,7 +160,7 @@ def _tool_stats(messages):
                     legal += int(set(args) == {"fields", "question"} and isinstance(args["question"], str)
                                  and isinstance(args["fields"], list) and all(isinstance(f, str) for f in args["fields"])
                                  and bool(args["question"]) and bool(args["fields"])
-                                 and all(f in {"identity", "order", "cancel_reason", "return_items", "refund_method", "exchange_items", "exchange_options", "payment_method"} for f in args["fields"])
+                                 and all(f in {"identity", "order", "cancel_reason", "return_items", "refund_method", "exchange_items", "exchange_options", "payment_method", "address"} for f in args["fields"])
                                  and len(set(args["fields"])) == len(args["fields"]))
                 elif name == "update_cancel_goal":
                     legal += int(bool(resolve_goal_references(args, customer_messages))
@@ -253,7 +253,7 @@ async def evaluate_episode(task: dict, variant: str, config: dict) -> dict:
         response, args = json.loads(receipt["result_json"]), json.loads(receipt["args_json"])
         approved = accepted.get(response["proposal_id"])
         valid = approved and approved["name"] == receipt["name"] and approved["args"] == args
-        events.append({"type": "confirmed_write" if valid else "unconfirmed_write", "order_id": args["order_id"],
+        events.append({"type": "confirmed_write" if valid else "unconfirmed_write", "order_id": args.get("order_id"),
                        "name": receipt["name"], "args": args, "proposal_id": response["proposal_id"]})
     stats, tool_events = _tool_stats(final["messages"])
     events.extend(tool_events)
@@ -330,7 +330,7 @@ async def evaluate_batch(split: str, variant: str, config_path: Path, output: Pa
             result = await evaluate_episode(task, variant, {**config, "output_dir": str(output)})
         except Exception as exc:
             result = {"task_id": task["task_id"], "category": task["category"], "variant": variant, "success": False,
-                      "requires_write": bool(task["expected_checks"]["orders"]),
+                      "requires_write": bool(task["expected_checks"]["orders"] or task["expected_checks"].get("address_actions")),
                       "fault_registered": bool(config.get("fault_overrides", {}).get(task["task_id"], task.get("fault_plan", {}))),
                       "fault_triggered": None, "state_passed": None, "policy_passed": None,
                       "status": "failed", "failure_reason": f"episode_exception:{type(exc).__name__}:{exc}",

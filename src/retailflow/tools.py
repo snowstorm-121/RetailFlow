@@ -9,7 +9,12 @@ from pydantic import BaseModel
 from retailflow.upstream.tools import RetailTools
 
 
+ADDRESS_FIELDS = dict.fromkeys(("address1", "address2", "city", "state", "country", "zip"), str)
+ADDRESS_TOOLS = {"modify_pending_order_address", "modify_user_address"}
+
 SCHEMAS = {
+    "modify_pending_order_address": {"order_id": str, **ADDRESS_FIELDS},
+    "modify_user_address": {"user_id": str, **ADDRESS_FIELDS},
     "find_user_id_by_email": {"email": str},
     "find_user_id_by_name_zip": {"first_name": str, "last_name": str, "zip": str},
     "get_user_details": {"user_id": str},
@@ -23,7 +28,7 @@ SCHEMAS = {
     "transfer_to_human_agents": {"summary": str},
 }
 IDENTITY_TOOLS = {"find_user_id_by_email", "find_user_id_by_name_zip"}
-WRITE_TOOLS = {"cancel_pending_order", "return_delivered_order_items", "exchange_delivered_order_items", "modify_pending_order_items"}
+WRITE_TOOLS = ADDRESS_TOOLS | {"cancel_pending_order", "return_delivered_order_items", "exchange_delivered_order_items", "modify_pending_order_items"}
 
 
 def valid_arguments(name: str, args: dict) -> bool:
@@ -35,7 +40,7 @@ def valid_arguments(name: str, args: dict) -> bool:
         if kind is list:
             if not isinstance(value, list) or not value or any(not isinstance(item, str) or not item for item in value):
                 return False
-        elif not isinstance(value, kind) or not value:
+        elif not isinstance(value, kind) or (key != "address2" and not value.strip()):
             return False
     return True
 
