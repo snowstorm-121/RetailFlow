@@ -234,7 +234,9 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 target = session["business"]["orders"].get(next_step["order_id"], {})
                 eligible_statuses = {"pending", "pending (item modified)"} if next_step["tool"] == "modify_pending_order_address" else {"pending"}
                 if target.get("user_id") == session["user_id"] and target.get("status") in eligible_statuses:
-                    if config.get("confirmed_this_turn") and state["model_calls"] == 0:
+                    retry_focus = (state["model_calls"] == 1 and
+                                   state["messages"][-1].additional_kwargs.get("focused_write_mismatch"))
+                    if config.get("confirmed_this_turn") and (state["model_calls"] == 0 or retry_focus):
                         focused_step = next_step
                     prompt += ("\nNext explicit step: " + json.dumps(next_step, ensure_ascii=False)
                                + ". Check business prerequisites and use a read tool or ask_user if needed. "
@@ -493,16 +495,17 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         name, args = call["name"], call["args"]
         start = time.perf_counter()
         retries = 0
-        if name not in metrics["context_inputs"][-1]["tool_names"]:
-            result = {"ok": False, "code": "INVALID_ARGUMENT", "message": "This tool was not offered in the current model request."}
-            status, request = "running", None
-        elif (focused_step and name in WRITE_TOOLS
-              and (name, args.get("order_id")) != (focused_step["tool"], focused_step["order_id"])):
+        focused_mismatch = bool(focused_step and name in WRITE_TOOLS
+                                and (name, args.get("order_id")) != (focused_step["tool"], focused_step["order_id"]))
+        if focused_mismatch:
             result = {"ok": False, "code": "INVALID_ARGUMENT",
                       "message": f"The next explicit step is {focused_step['tool']} for {focused_step['order_id']}. "
-                                 "Read or clarify the requested target before proposing."}
+                                 "This rejected call did not undo any confirmed action. Read or clarify the target if needed."}
             metrics["tool_attempts"].append({"tool_call_id": call["id"], "name": name, "args": args,
                                              "code": result["code"], "message": result["message"], "attempt": 1})
+            status, request = "running", None
+        elif name not in metrics["context_inputs"][-1]["tool_names"]:
+            result = {"ok": False, "code": "INVALID_ARGUMENT", "message": "This tool was not offered in the current model request."}
             status, request = "running", None
         elif name == "update_cancel_goal":
             customer_messages = [m.content for m in state["messages"] if isinstance(m, HumanMessage)]
@@ -588,7 +591,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         metrics["tool_seconds"] += time.perf_counter() - start
         metrics["tool_calls"] += 1 + retries
         message = ToolMessage(content=json.dumps(result, ensure_ascii=False), name=name, tool_call_id=call["id"],
-                              status="success" if result["ok"] else "error")
+                              status="success" if result["ok"] else "error",
+                              additional_kwargs={"focused_write_mismatch": True} if focused_mismatch else {})
         persist(state, [message])
         return {"messages": [message], "status": status, "request": request}
 

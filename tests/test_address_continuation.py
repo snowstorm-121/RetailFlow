@@ -125,6 +125,7 @@ def test_confirmed_address_focuses_next_explicit_step_and_rejects_wrong_target(t
     agent, model, config = runtime(tmp_path, [
         call("find_user_id_by_name_zip", {"first_name": "Yara", "last_name": "Muller", "zip": "85041"}, "identity"),
         call("modify_pending_order_address", address, "address"),
+        call("modify_pending_order_address", address, "wrong-action"),
         call("cancel_pending_order", {**cancel, "order_id": address["order_id"]}, "wrong-target"),
         call("cancel_pending_order", cancel, "cancel"),
     ])
@@ -140,10 +141,13 @@ def test_confirmed_address_focuses_next_explicit_step_and_rejects_wrong_target(t
         assert agent.environment.get_order("focus", cancel["order_id"])["status"] == "pending"
         assert agent.environment.get_order("focus", address["order_id"])["status"] == "pending"
         assert any(attempt["code"] == "INVALID_ARGUMENT" for attempt in result["usage"]["tool_attempts"])
-        first, second = result["usage"]["context_inputs"]
-        assert set(first["tool_names"]).isdisjoint(
-            {"modify_pending_order_address", "modify_pending_order_items", "modify_user_address"})
-        assert "modify_pending_order_items" in second["tool_names"]
+        first, retry, fallback = result["usage"]["context_inputs"]
+        other_writes = {"modify_pending_order_address", "modify_pending_order_items", "modify_user_address"}
+        assert set(first["tool_names"]).isdisjoint(other_writes)
+        assert set(retry["tool_names"]).isdisjoint(other_writes)
+        assert other_writes <= set(fallback["tool_names"])
+        retry_message = retry["messages"][-1]["data"]["content"]
+        assert "cancel_pending_order for #W5995614" in retry_message
     asyncio.run(run())
 
 
