@@ -171,6 +171,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
     metrics.setdefault("receipt_reviews", 0)
     proposal_repair_active = False
     continuation_checked = False
+    focused_step = None
 
     def persist(state, messages):
         if persist_messages:
@@ -186,7 +187,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                                  if isinstance(m, HumanMessage) and isinstance(m.content, str)])
 
     async def retail_model(state: RetailState, runtime: Runtime[Context]):
-        nonlocal proposal_repair_active, continuation_checked
+        nonlocal proposal_repair_active, continuation_checked, focused_step
+        focused_step = None
         if state["model_calls"] >= max_model_calls:
             return {"status": "budget_exceeded", "failure_reason": "model_call_budget"}
         prompt = runtime.context.system_prompt.format(system_time=datetime.now(tz=UTC).isoformat())
@@ -226,6 +228,17 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                     order_id = json.loads(receipt).get("order_id")
                     committed.add((message.additional_kwargs["committed_tool"], order_id))
             checklist = [{**step, "committed": (step["tool"], step["order_id"]) in committed} for step in steps]
+            next_step = next((step for step in checklist if not step["committed"]), None)
+            if (next_step and session.get("user_id") and any(step["committed"] for step in checklist)
+                    and len(checklist) > 1 and goal_state is None):
+                target = session["business"]["orders"].get(next_step["order_id"], {})
+                eligible_statuses = {"pending", "pending (item modified)"} if next_step["tool"] == "modify_pending_order_address" else {"pending"}
+                if target.get("user_id") == session["user_id"] and target.get("status") in eligible_statuses:
+                    if config.get("confirmed_this_turn") and state["model_calls"] == 0:
+                        focused_step = next_step
+                    prompt += ("\nNext explicit step: " + json.dumps(next_step, ensure_ascii=False)
+                               + ". Check business prerequisites and use a read tool or ask_user if needed. "
+                                 "If eligible, make a native proposal for separate user confirmation.")
             prompt += ("\nExplicit request checklist (planning only; later user changes override it): "
                        + json.dumps(checklist, ensure_ascii=False)
                        + ". Continue any pending step through verified reads and a native proposal. "
@@ -268,6 +281,9 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                             json.loads(latest.content).get("code") == "MISSING_USER_INFORMATION")
         information_repair = repair and latest.additional_kwargs["protocol_feedback"] == "information"
         offered = retail_tools_for_session(session) if config.get("state_tool_filter", False) else RETAIL_TOOLS
+        if focused_step:
+            offered = [tool for tool in offered if tool["function"]["name"] not in WRITE_TOOLS
+                       or tool["function"]["name"] == focused_step["tool"]]
         if information_repair or missing_identity:
             offered = [RETAIL_TOOLS[-1]]
         if planning:
@@ -479,6 +495,14 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         retries = 0
         if name not in metrics["context_inputs"][-1]["tool_names"]:
             result = {"ok": False, "code": "INVALID_ARGUMENT", "message": "This tool was not offered in the current model request."}
+            status, request = "running", None
+        elif (focused_step and name in WRITE_TOOLS
+              and (name, args.get("order_id")) != (focused_step["tool"], focused_step["order_id"])):
+            result = {"ok": False, "code": "INVALID_ARGUMENT",
+                      "message": f"The next explicit step is {focused_step['tool']} for {focused_step['order_id']}. "
+                                 "Read or clarify the requested target before proposing."}
+            metrics["tool_attempts"].append({"tool_call_id": call["id"], "name": name, "args": args,
+                                             "code": result["code"], "message": result["message"], "attempt": 1})
             status, request = "running", None
         elif name == "update_cancel_goal":
             customer_messages = [m.content for m in state["messages"] if isinstance(m, HumanMessage)]

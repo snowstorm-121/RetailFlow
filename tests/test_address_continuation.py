@@ -116,3 +116,53 @@ def test_text_tool_name_and_arguments_envelope_is_not_a_final_answer(tmp_path):
     assert result["status"] == "failed"
     assert result["failure_reason"] == "non_native_tool_action"
     assert result["usage"]["tool_calls"] == 0
+
+
+def test_confirmed_address_focuses_next_explicit_step_and_rejects_wrong_target(tmp_path):
+    address = {"order_id": "#W5056519", "address1": "380 Maple Drive", "address2": "Suite 960",
+               "city": "San Diego", "state": "CA", "country": "USA", "zip": "92101"}
+    cancel = {"order_id": "#W5995614", "reason": "ordered by mistake"}
+    agent, model, config = runtime(tmp_path, [
+        call("find_user_id_by_name_zip", {"first_name": "Yara", "last_name": "Muller", "zip": "85041"}, "identity"),
+        call("modify_pending_order_address", address, "address"),
+        call("cancel_pending_order", {**cancel, "order_id": address["order_id"]}, "wrong-target"),
+        call("cancel_pending_order", cancel, "cancel"),
+    ])
+
+    async def run():
+        proposal = await agent.run_turn("focus", {"kind": "message", "text":
+            "I'm Yara Muller ZIP 85041. Change shipping for #W5056519 to 380 Maple Drive, Suite 960, "
+            "San Diego, CA 92101, USA. Also cancel #W5995614 because I ordered it by mistake."}, config)
+        result = await agent.run_turn("focus", {"kind": "confirmation", "accepted": True,
+                                                 "proposal_id": proposal["request"]["proposal_id"]}, config)
+        assert result["status"] == "needs_confirmation"
+        assert result["request"]["args"] == cancel
+        assert agent.environment.get_order("focus", cancel["order_id"])["status"] == "pending"
+        assert agent.environment.get_order("focus", address["order_id"])["status"] == "pending"
+        assert any(attempt["code"] == "INVALID_ARGUMENT" for attempt in result["usage"]["tool_attempts"])
+        first, second = result["usage"]["context_inputs"]
+        assert set(first["tool_names"]).isdisjoint(
+            {"modify_pending_order_address", "modify_pending_order_items", "modify_user_address"})
+        assert "modify_pending_order_items" in second["tool_names"]
+    asyncio.run(run())
+
+
+def test_ineligible_next_step_does_not_hide_other_writes(tmp_path):
+    address = {"order_id": "#W5056519", "address1": "380 Maple Drive", "address2": "Suite 960",
+               "city": "San Diego", "state": "CA", "country": "USA", "zip": "92101"}
+    agent, _, config = runtime(tmp_path, [
+        call("find_user_id_by_name_zip", {"first_name": "Yara", "last_name": "Muller", "zip": "85041"}, "identity"),
+        call("modify_pending_order_address", address, "address"),
+        AIMessage(content="Address updated. The delivered order is ineligible for cancellation."),
+        AIMessage(content="Address updated. The delivered order is ineligible for cancellation."),
+    ], isolated_proposal_repair=True)
+
+    async def run():
+        result = await agent.run_turn("focus", {"kind": "message", "text":
+            "I'm Yara Muller ZIP 85041. Change shipping for #W5056519 to San Diego. "
+            "Also cancel #W9384736 because I ordered it by mistake."}, config)
+        result = await agent.run_turn("focus", {"kind": "confirmation", "accepted": True,
+                                                 "proposal_id": result["request"]["proposal_id"]}, config)
+        assert result["status"] == "answered"
+        assert "return_delivered_order_items" in result["usage"]["context_inputs"][0]["tool_names"]
+    asyncio.run(run())
