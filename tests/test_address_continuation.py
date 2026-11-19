@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 from langchain_core.messages import AIMessage
 
 from test_agent_loop import call, runtime
@@ -80,14 +82,18 @@ def test_optional_completion_check_preserves_last_budgeted_answer(tmp_path):
     assert not model.responses
 
 
-def test_followup_cannot_report_cancellation_without_receipt(tmp_path):
+@pytest.mark.parametrize("claim", [
+    "Cancellation of order #W5995614 was initiated.",
+    "**#W5995614** canceled with refund of $164.28.",
+])
+def test_followup_cannot_report_cancellation_without_receipt(tmp_path, claim):
     args = {"order_id": "#W5056519", "address1": "380 Maple Drive", "address2": "Suite 960",
             "city": "San Diego", "state": "CA", "country": "USA", "zip": "92101"}
     agent, _, config = runtime(tmp_path, [
         call("find_user_id_by_name_zip", {"first_name": "Yara", "last_name": "Muller", "zip": "85041"}, "identity"),
         call("modify_pending_order_address", args, "address"),
         AIMessage(content="The address was updated."),
-        AIMessage(content="Cancellation of order #W5995614 was initiated."),
+        AIMessage(content=claim),
     ])
 
     async def run():
@@ -97,7 +103,7 @@ def test_followup_cannot_report_cancellation_without_receipt(tmp_path):
                                                 "proposal_id": first["request"]["proposal_id"]}, config)
         assert result["status"] == "failed"
         assert result["failure_reason"] == "unverified_cancellation_claim"
-        assert "Cancellation of order #W5995614 was initiated" not in result["text"]
+        assert claim not in result["text"]
         assert agent.environment.get_order("mixed", "#W5995614")["status"] == "pending"
     asyncio.run(run())
 

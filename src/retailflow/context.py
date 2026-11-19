@@ -11,7 +11,7 @@ VISIBLE_FIELDS = {"order_id", "user_id", "status", "items", "item_id", "product_
                   "first_name", "last_name", "zip", "address1", "address2", "city", "state", "country", "email", "fulfillments", "tracking_id", "code", "ok",
                   "proposal_id", "reason", "data", "orders", "order_summaries", "source", "id", "last_four",
                   "transaction_type", "amount", "variants", "options", "available", "message", "fields", "question",
-                  "scope", "order_ids", "source_quote", "available_variant_count", "exchange_items",
+                  "scope", "order_ids", "source_quote", "available_variant_count", "available_option_hits", "matched_options", "exchange_items",
                   "exchange_new_items", "exchange_payment_method_id", "exchange_price_difference"}
 
 
@@ -23,7 +23,7 @@ def _visible(value):
     if isinstance(value, dict):
         return {key: ({item_id: _visible(details) for item_id, details in item.items()}
                       if key in {"payment_methods", "variants"} and isinstance(item, dict)
-                      else dict(item) if key == "options" and isinstance(item, dict) else _visible(item))
+                      else dict(item) if key in {"options", "matched_options"} and isinstance(item, dict) else _visible(item))
                 for key, item in value.items() if key in VISIBLE_FIELDS}
     if isinstance(value, list):
         return [_visible(item) for item in value]

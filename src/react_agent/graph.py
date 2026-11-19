@@ -162,6 +162,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
     """Build the retail loop around the template's model → tool → model pattern."""
 
     from retailflow.context import ContextBudgetExceeded, build_model_context
+    from retailflow.address_followups import advisory_opening, explicit_address_steps, matching_variants, processing_guarantee_fact
     from retailflow.cancel_goals import GOAL_TOOL, GOAL_PROMPT, validate_goal, goal_progress
     from retailflow.cancel_goals import GOAL_REFERENCE_TOOL, GOAL_REFERENCE_PROMPT, goal_reference_input, resolve_goal_references
 
@@ -174,6 +175,15 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
     def persist(state, messages):
         if persist_messages:
             persist_messages(add_messages(state["messages"], messages))
+
+    def active_request(messages):
+        start = next((i for i in range(len(messages) - 1, -1, -1)
+                      if messages[i].additional_kwargs.get("request_start")), 0)
+        return messages[start:]
+
+    def request_text(messages):
+        return advisory_opening([m.content for m in messages
+                                 if isinstance(m, HumanMessage) and isinstance(m.content, str)])
 
     async def retail_model(state: RetailState, runtime: Runtime[Context]):
         nonlocal proposal_repair_active, continuation_checked
@@ -197,9 +207,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             progress = goal_progress(goal_state, session.get("user_id"), session["business"], inventory, committed)
             persist_goal()
             prompt += "\nCancellation goal progress (not write authorization): " + json.dumps(progress)
-        request_start = next((i for i in range(len(state["messages"]) - 1, -1, -1)
-                              if state["messages"][i].additional_kwargs.get("request_start")), 0)
-        active_messages = state["messages"][request_start:]
+        active_messages = active_request(state["messages"])
         address_request = any(
             isinstance(message, HumanMessage) and isinstance(message.content, str)
             and re.search(r"\b(?:address|suite|ship(?:ping)?)\b", message.content, re.I)
@@ -208,6 +216,25 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         )
         outcomes = [message for message in active_messages
                     if message.additional_kwargs.get("application_result")]
+        opening = request_text(active_messages)
+        steps = explicit_address_steps(opening) if address_request else []
+        if steps:
+            committed = set()
+            for message in outcomes:
+                receipt = message.content.removeprefix("Application outcome: ")
+                if message.additional_kwargs.get("committed_tool") and receipt != message.content:
+                    order_id = json.loads(receipt).get("order_id")
+                    committed.add((message.additional_kwargs["committed_tool"], order_id))
+            checklist = [{**step, "committed": (step["tool"], step["order_id"]) in committed} for step in steps]
+            prompt += ("\nExplicit request checklist (planning only; later user changes override it): "
+                       + json.dumps(checklist, ensure_ascii=False)
+                       + ". Continue any pending step through verified reads and a native proposal. "
+                         "For pending item changes, read the old item in its order, then look up that item's product_id. "
+                         "Use only available catalog variant IDs. Any catalog option hits are partial evidence: verify "
+                         "all requested preferences before selecting. Never invent an ID or repeat committed steps.")
+        deadline_fact = processing_guarantee_fact(opening)
+        if deadline_fact:
+            prompt += "\n" + deadline_fact
         has_cancel_receipt = any(message.additional_kwargs.get("committed_tool") == "cancel_pending_order"
                                  for message in outcomes)
         cancel_requested = address_request and any(
@@ -381,10 +408,10 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                                     and re.search(r"\b(?:change|chang(?:ing|ed)|updat\w*|modify|proceed)\b", text, re.I))
             proposal_missing = (isinstance(text, str) and session.get("user_id")
                                 and (address_confirmation or session.get("target_order_status") in {None, "pending", "delivered"})
-                                and re.search(r"please confirm|(?:could|can|would) you confirm|do you (?:confirm|want)|would you like me to (?:proceed|cancel|return|exchange|modify)|\b(?:proposal|return request|cancellation request|exchange request|modification proposal)(?: (?:has been |was |is now )?| for [^.!?\n]+? (?:has been |was |is now ))(?:successfully )?(?:created|submitted|staged)\b", text, re.I)
+                                and re.search(r"please confirm|(?:could|can|would) you confirm|do you (?:confirm|want)|would you like (?:me )?to (?:proceed|cancel|return|exchange|modify)|\b(?:proposal|return request|cancellation request|exchange request|modification proposal)(?: (?:has been |was |is now )?| for [^.!?\n]+? (?:has been |was |is now ))(?:successfully )?(?:created|submitted|staged)\b", text, re.I)
                                 and (address_confirmation or re.search(r"cancel|return|exchange|modify|modification", text, re.I)))
             explicit_confirmation = (isinstance(text, str) and re.search(
-                r"please confirm (?:if|whether) you (?:would like|want|wish)|would you like me to (?:proceed|cancel|return|exchange|modify)|do you want me to",
+                r"please confirm (?:if|whether) you (?:would like|want|wish)|would you like (?:me )?to (?:proceed|cancel|return|exchange|modify)|do you want me to",
                 text, re.I))
             kind = ("empty" if not text else "proposal" if proposal_missing and explicit_confirmation else
                     "information" if _requests_information(text) else "proposal" if proposal_missing else None)
@@ -423,7 +450,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 return {"messages": [response, feedback], "model_calls": state["model_calls"] + 1, "status": "repairing"}
             if (cancel_requested and outcomes and not has_cancel_receipt and isinstance(text, str)
                     and re.search(r"\bcancellation\b[^.!?\n]{0,90}\b(?:was|has been|is now)\s+(?:initiated|confirmed|completed|processed)"
-                                  r"|\b(?:was|were|has been|have been|successfully)\s+cancel(?:l)?ed\b", text, re.I)):
+                                  r"|\b(?:was|were|has been|have been|successfully)\s+cancel(?:l)?ed\b"
+                                  r"|#W\d+[*`_]*\s+cancel(?:l)?ed\b", text, re.I)):
                 return {"messages": [response], "model_calls": state["model_calls"] + 1,
                         "status": "failed", "failure_reason": "unverified_cancellation_claim"}
         if (not response.tool_calls and config.get("receipt_answer_review", False)
@@ -506,6 +534,25 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         if config.get("catalog_availability_facts", False) and name == "get_product_details" and result["ok"]:
             result["data"]["available_variant_count"] = sum(
                 variant["available"] is True for variant in result["data"]["variants"].values())
+        if name == "get_product_details" and result["ok"]:
+            active = active_request(state["messages"])
+            product = result["data"]
+            for step in explicit_address_steps(request_text(active)):
+                if step["tool"] != "modify_pending_order_items":
+                    continue
+                for message in reversed(active):
+                    if not isinstance(message, ToolMessage) or message.name != "get_order_details":
+                        continue
+                    read = json.loads(message.content)
+                    if read.get("ok") and read["data"]["order_id"] == step["order_id"]:
+                        if any(item["product_id"] == args["product_id"]
+                               and re.search(r"(?<!\w)" + re.escape(item["name"]) + r"(?!\w)",
+                                             step["item_description"], re.I)
+                               for item in read["data"]["items"]):
+                            candidates = matching_variants(product["variants"], step["preferences"])
+                            if candidates:
+                                product["available_option_hits"] = candidates
+                        break
         if config.get("profile_order_summaries", False) and name == "get_user_details" and result["ok"]:
             session = environment.load_session(thread_id)
             result["data"]["order_summaries"] = [
