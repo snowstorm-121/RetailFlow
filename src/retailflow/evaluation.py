@@ -189,6 +189,8 @@ async def evaluate_episode(task: dict, variant: str, config: dict) -> dict:
     if "runtime" not in config:
         worker.environment = FaultEnvironment(worker.environment.store_path, plan)
     execution = {**config.get("execution", {}), **VARIANTS[variant], "initial_state_ref": task["initial_state_ref"]}
+    if task["task_id"] in config.get("preserve_return_answers", []):
+        execution["return_receipt_response"] = False
     worker.environment.create_session(thread, task["initial_state_ref"])
     before = worker.environment.load_session(thread)["business"]
     before_hash = worker.environment.state_hash(thread)

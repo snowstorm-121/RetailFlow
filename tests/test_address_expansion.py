@@ -128,3 +128,28 @@ def test_evaluator_collects_profile_receipt_without_order_id(tmp_path):
     assert result['objective_passed'], result
     receipt = next(event for event in result['events'] if event['type'] == 'confirmed_write')
     assert receipt['name'] == name and receipt['order_id'] is None
+
+
+def test_mixed_address_return_task_preserves_tracking_answer(tmp_path):
+    import asyncio
+
+    from langchain_core.messages import AIMessage
+    from retailflow.dataset import ROOT
+    from retailflow.evaluation import evaluate_episode
+    from test_agent_loop import call, runtime
+
+    config = json.loads((ROOT / 'configs/address-evaluation.json').read_text())
+    root = ROOT / config['dataset_root'] / 'data/derived'
+    task = next(t for path in root.glob('*.jsonl') for line in path.read_text().splitlines()
+                if (t := json.loads(line))['source_task_id'] == '104')
+    task['initial_user_message'] += ' My email is lucas.brown9344@example.com.'
+    actions = config['user_consent'][task['task_id']]['approved_reference_actions']
+    worker, _, execution = runtime(tmp_path, [
+        call('find_user_id_by_email', {'email': 'lucas.brown9344@example.com'}, 'identity'),
+        *(call(action['name'], action['arguments'], f'proposal-{i}') for i, action in enumerate(actions)),
+        AIMessage(content='The cancelled order tracking number is 286422338955.'),
+    ], return_receipt_response=True)
+    result = asyncio.run(evaluate_episode(task, 'B2', {
+        **config, 'execution': execution, 'output_dir': str(tmp_path), 'runtime': worker,
+    }))
+    assert result['objective_passed'] and result['required_info_literal_match'], result

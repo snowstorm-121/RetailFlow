@@ -79,6 +79,8 @@ def build():
     config.update(dataset_root=root, output_root=root, dataset_version="t5-address-v1",
                   experiment_version="address-expansion-v1",
                   revision_note="Local address adaptations with source provenance and strict private proposal checks.")
+    # These tasks ask for tracking information as well as a return receipt.
+    config["preserve_return_answers"] = ["tau-retail-103", "tau-retail-104"]
     config["additional_tools"] += ["modify_pending_order_address", "modify_user_address"]
     manifest = prepare_dataset(config)
     (ROOT / "configs/address-evaluation.json").write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n")
