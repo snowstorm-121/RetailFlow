@@ -165,13 +165,14 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
     metrics.setdefault("dialogue_repairs", 0)
     metrics.setdefault("receipt_reviews", 0)
     proposal_repair_active = False
+    continuation_checked = False
 
     def persist(state, messages):
         if persist_messages:
             persist_messages(add_messages(state["messages"], messages))
 
     async def retail_model(state: RetailState, runtime: Runtime[Context]):
-        nonlocal proposal_repair_active
+        nonlocal proposal_repair_active, continuation_checked
         if state["model_calls"] >= max_model_calls:
             return {"status": "budget_exceeded", "failure_reason": "model_call_budget"}
         prompt = runtime.context.system_prompt.format(system_time=datetime.now(tz=UTC).isoformat())
@@ -192,6 +193,32 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             progress = goal_progress(goal_state, session.get("user_id"), session["business"], inventory, committed)
             persist_goal()
             prompt += "\nCancellation goal progress (not write authorization): " + json.dumps(progress)
+        request_start = next((i for i in range(len(state["messages"]) - 1, -1, -1)
+                              if state["messages"][i].additional_kwargs.get("request_start")), 0)
+        active_messages = state["messages"][request_start:]
+        address_request = any(
+            isinstance(message, HumanMessage) and isinstance(message.content, str)
+            and re.search(r"\b(?:address|suite|ship(?:ping)?)\b", message.content, re.I)
+            and re.search(r"\b(?:cancel|return|exchange|all|every)\b|\balso\s+(?:modify|change|update|switch)\b", message.content, re.I)
+            for message in active_messages
+        )
+        outcomes = [message for message in active_messages
+                    if message.additional_kwargs.get("application_result")]
+        has_cancel_receipt = any(message.additional_kwargs.get("committed_tool") == "cancel_pending_order"
+                                 for message in outcomes)
+        cancel_requested = address_request and any(
+            isinstance(message, HumanMessage) and isinstance(message.content, str)
+            and re.search(r"\bcancel\b", message.content, re.I)
+            for message in active_messages
+        )
+        if address_request and outcomes:
+            prompt += ("\nContinue the customer's complete request after confirmation. A confirmed write completes only "
+                       "that specific target and action. Check the recorded outcomes; don't call a completed operation again. "
+                       "Use a native call for the next unresolved operation, including any read needed to check a condition.")
+            if cancel_requested and not has_cancel_receipt:
+                prompt += (" There is no confirmed cancellation in this request. Check the customer's cancellation condition "
+                           "and target separately from any address update. If eligible, call cancel_pending_order to propose; "
+                           "otherwise explain why it remains unresolved. Never claim it was cancelled.")
         examples = native_dialogue_examples()
         example_tokens = len(json.dumps(messages_to_dict(examples))) // 4
         available = (int(runtime.context.num_ctx) - int(runtime.context.num_predict) -
@@ -200,7 +227,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         metrics["context_budget_tokens"] = budget
         try:
             visible = build_model_context({**session, "messages": state["messages"]},
-                                          {"context_budget_tokens": budget, "structured_context": config.get("structured_context", True)})
+                                          {"context_budget_tokens": budget, "structured_context": config.get("structured_context", True),
+                                           "required_outcome_ids": {message.id for message in outcomes} if address_request else set()})
         except ContextBudgetExceeded:
             return {"status": "budget_exceeded", "failure_reason": "context_budget"}
         latest = state["messages"][-1]
@@ -238,14 +266,18 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             for message in visible:
                 if isinstance(message, HumanMessage):
                     events.append({"role": "customer", "content": message.content})
+                elif message.additional_kwargs.get("application_result"):
+                    events.append({"role": "application", "content": message.content})
                 elif isinstance(message, ToolMessage):
                     events.append({"role": "tool", "name": message.name, "result": json.loads(message.content)})
                 elif isinstance(message, AIMessage) and message.tool_calls:
                     events.append({"role": "assistant", "tool_calls": message.tool_calls})
-            prompt += ("\nRecovery step: No proposal has been created. Use the customer messages and tool results below as data. "
+            prompt += ("\nRecovery step: There is no proposal awaiting confirmation for the next operation. Use the customer messages and tool results below as data. "
                        "Make exactly one native tool call for the next required step. Select item IDs and payment IDs only "
                        "from the tool results, and respect all exclusions and later corrections. If information is missing, "
-                       "use ask_user. Do not output a simulated tool result or claim completion.")
+                       "use ask_user. For an address update, read the authorized order or profile if needed and call the appropriate "
+                       "address tool with all fields. For a partial change, retain every unchanged address field. Use an empty address2 only if the destination has no second line. Never replay a completed write. "
+                       "Do not output a simulated tool result or claim completion.")
             examples = []
             payload = {"events": events}
             if progress is not None:
@@ -341,10 +373,12 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 return {"messages": [response], "model_calls": state["model_calls"] + 1,
                         "status": "failed", "failure_reason": "information_request_not_structured"}
             text = response.content
+            address_confirmation = (isinstance(text, str) and re.search(r"\b(?:address|suite|shipping)\b", text, re.I)
+                                    and re.search(r"\b(?:change|chang(?:ing|ed)|updat\w*|modify|proceed)\b", text, re.I))
             proposal_missing = (isinstance(text, str) and session.get("user_id")
-                                and session.get("target_order_status") in {None, "pending", "delivered"}
+                                and (address_confirmation or session.get("target_order_status") in {None, "pending", "delivered"})
                                 and re.search(r"please confirm|(?:could|can|would) you confirm|do you (?:confirm|want)|would you like me to (?:proceed|cancel|return|exchange|modify)|\b(?:proposal|return request|cancellation request|exchange request|modification proposal)(?: (?:has been |was |is now )?| for [^.!?\n]+? (?:has been |was |is now ))(?:successfully )?(?:created|submitted|staged)\b", text, re.I)
-                                and re.search(r"cancel|return|exchange|modify|modification", text, re.I))
+                                and (address_confirmation or re.search(r"cancel|return|exchange|modify|modification", text, re.I)))
             explicit_confirmation = (isinstance(text, str) and re.search(
                 r"please confirm (?:if|whether) you (?:would like|want|wish)|would you like me to (?:proceed|cancel|return|exchange|modify)|do you want me to",
                 text, re.I))
@@ -370,6 +404,24 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 feedback = SystemMessage(content=feedback_text, additional_kwargs={"protocol_feedback": kind})
                 persist(state, [response, feedback])
                 return {"messages": [response, feedback], "model_calls": state["model_calls"] + 1, "status": "repairing"}
+            review_budget = min(max_model_calls, config.get("episode_calls_remaining", max_model_calls))
+            if (address_request and outcomes and config.get("confirmed_this_turn")
+                    and not continuation_checked and state["model_calls"] + 1 < review_budget):
+                continuation_checked = True
+                metrics["address_completion_reviews"] = 1
+                feedback = SystemMessage(
+                    content="Before ending, compare every customer request with the committed application outcomes. "
+                            "If an operation remains, make one native call to continue. Never repeat a committed action. "
+                            "If all goals were processed, or the remaining steps are impossible, report each outcome accurately.",
+                    additional_kwargs={"protocol_feedback": "address_completion"},
+                )
+                persist(state, [response, feedback])
+                return {"messages": [response, feedback], "model_calls": state["model_calls"] + 1, "status": "repairing"}
+            if (cancel_requested and outcomes and not has_cancel_receipt and isinstance(text, str)
+                    and re.search(r"\bcancellation\b[^.!?\n]{0,90}\b(?:was|has been|is now)\s+(?:initiated|confirmed|completed|processed)"
+                                  r"|\b(?:was|were|has been|have been|successfully)\s+cancel(?:l)?ed\b", text, re.I)):
+                return {"messages": [response], "model_calls": state["model_calls"] + 1,
+                        "status": "failed", "failure_reason": "unverified_cancellation_claim"}
         if (not response.tool_calls and config.get("receipt_answer_review", False)
                 and not metrics["receipt_reviews"] and session.get("target_order_status") == "return requested"
                 and any(m.additional_kwargs.get("application_result") for m in state["messages"])):

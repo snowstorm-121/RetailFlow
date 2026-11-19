@@ -148,6 +148,7 @@ def test_mixed_address_return_task_preserves_tracking_answer(tmp_path):
         call('find_user_id_by_email', {'email': 'lucas.brown9344@example.com'}, 'identity'),
         *(call(action['name'], action['arguments'], f'proposal-{i}') for i, action in enumerate(actions)),
         AIMessage(content='The cancelled order tracking number is 286422338955.'),
+        AIMessage(content='The cancelled order tracking number is 286422338955.'),
     ], return_receipt_response=True)
     result = asyncio.run(evaluate_episode(task, 'B2', {
         **config, 'execution': execution, 'output_dir': str(tmp_path), 'runtime': worker,

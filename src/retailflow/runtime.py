@@ -108,7 +108,9 @@ class RetailRuntime:
             pass
         elif user_event.get("kind") == "message" and isinstance(user_event.get("text"), str) and user_event["text"].strip():
             self.environment.invalidate_pending(thread_id)
-            messages.append(HumanMessage(content=user_event["text"]))
+            messages.append(HumanMessage(content=user_event["text"], additional_kwargs={
+                "request_start": metadata.get("last_status") != "needs_input",
+            }))
         elif user_event.get("kind") == "confirmation" and type(user_event.get("accepted")) is bool:
             pending = self.environment.pending_proposal(thread_id)
             receipt = (self.environment.receipt_for_proposal(thread_id, user_event.get("proposal_id", ""))
@@ -165,7 +167,8 @@ class RetailRuntime:
                         summary["exchange_details"]["settlement_status"] = "not_settled"
                 metrics["confirmed_result"] = outcome
                 messages.append(SystemMessage(content="Application outcome: " + json.dumps(summary, ensure_ascii=False),
-                                              additional_kwargs={"application_result": True}))
+                                              additional_kwargs={"application_result": True,
+                                                                 "committed_tool": action_name if outcome["ok"] else None}))
                 if not outcome["ok"]:
                     status, text = "failed", outcome.get("message", outcome["code"])
                     failure_reason = outcome["code"]
@@ -198,7 +201,9 @@ class RetailRuntime:
             context = Context(**context_values, system_prompt=RETAIL_PROMPT)
             graph = make_retail_graph(self.environment, thread_id, self.model_factory, metrics,
                                       int(config.get("max_model_calls_per_turn", 12)),
-                                      {**config, "receipt_answer_review": bool(config.get("receipt_answer_review") and confirmed_outcome)},
+                                      {**config, "receipt_answer_review": bool(config.get("receipt_answer_review") and confirmed_outcome),
+                                       "confirmed_this_turn": bool(confirmed_outcome),
+                                       "episode_calls_remaining": int(config.get("max_model_calls_per_episode", 24)) - metadata["model_calls"]},
                                       persist_messages=lambda current: self._save_messages(thread_id, current),
                                       before_model=before_model, goal_state=goal_state,
                                       persist_goal=lambda: self._save_runtime(thread_id, metadata))

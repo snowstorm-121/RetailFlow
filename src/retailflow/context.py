@@ -88,6 +88,8 @@ def build_model_context(state: dict, config: dict) -> list:
     # User turns are bounded by the episode budget. Keep original requests and
     # corrections even when the latest user event is only a confirmation.
     selected.update(index for index, block in enumerate(blocks) if isinstance(block[0], HumanMessage))
+    required_outcomes = config.get("required_outcome_ids", set())
+    selected.update(index for index, block in enumerate(blocks) if block[0].id in required_outcomes)
     used = len(json.dumps(messages_to_dict(prefix), ensure_ascii=False)) // 4 + 1
     used += sum(costs[index] for index in selected)
     if used > budget:
