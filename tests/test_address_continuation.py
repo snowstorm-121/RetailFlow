@@ -100,3 +100,13 @@ def test_followup_cannot_report_cancellation_without_receipt(tmp_path):
         assert "Cancellation of order #W5995614 was initiated" not in result["text"]
         assert agent.environment.get_order("mixed", "#W5995614")["status"] == "pending"
     asyncio.run(run())
+
+
+def test_text_tool_name_and_arguments_envelope_is_not_a_final_answer(tmp_path):
+    agent, _, config = runtime(tmp_path, [
+        AIMessage(content='{"name": "cancel_pending_order", "arguments": {"order_id": "W5995614", "reason": "ordered by mistake"}}'),
+    ])
+    result = asyncio.run(agent.run_turn("text-tool", {"kind": "message", "text": "Cancel my order."}, config))
+    assert result["status"] == "failed"
+    assert result["failure_reason"] == "non_native_tool_action"
+    assert result["usage"]["tool_calls"] == 0

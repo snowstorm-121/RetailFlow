@@ -144,8 +144,12 @@ def _is_text_tool_action(text):
         value = json.loads(candidate)
     except ValueError:
         return False
-    return (isinstance(value, dict) and isinstance(value.get("action"), str)
-            and value["action"] in {tool["function"]["name"] for tool in RETAIL_TOOLS})
+    if not isinstance(value, dict):
+        return False
+    name = value.get("action")
+    if name is None and isinstance(value.get("arguments"), dict):
+        name = value.get("name")
+    return isinstance(name, str) and any(tool["function"]["name"] == name for tool in RETAIL_TOOLS)
 
 
 def _identity_is_grounded(args, messages):
