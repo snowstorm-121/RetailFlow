@@ -47,6 +47,75 @@ def address_order_candidates(customer_text, business, user_id, order_ids):
     return [row for rank, row in rows if rank == best][:5]
 
 
+def address_copy_target(text, business, user_id):
+    """Resolve a named source and the distinct pending order at the current account address."""
+    copy = re.search(
+        r"(?:^|[.!?]\s+)(?:please\s+)?copy (?:the )?(?:shipping )?address "
+        r"from (?:my|the) ([a-z][a-z -]*?) order to (?:the|my) (?:pending )?order "
+        r"(?:still )?(?:going|shipping) to my old (?:house|address)"
+        r"( and set it as my account default)?(?=[.!?]|$)", text, re.I,
+    )
+    if not copy or not user_id:
+        return None
+    user = business["users"][user_id]
+    orders = [business["orders"][key] for key in user["orders"]]
+    owned = [order for order in orders if order["user_id"] == user_id]
+    sources = [order for order in owned if any(
+        re.search(r"\b" + re.escape(copy[1]) + r"\b", item["name"], re.I) for item in order["items"]
+    )]
+    if len(sources) != 1 or sources[0]["address"] == user["address"]:
+        return None
+    source = sources[0]
+    destinations = [order for order in owned if order["address"] == user["address"]
+                    and order["status"] in {"pending", "pending (item modified)"}]
+    if len(destinations) != 1:
+        return None
+    return {"source_order_id": source["order_id"], "destination_order_id": destinations[0]["order_id"],
+            "address": source["address"], "update_default": bool(copy[2])}
+
+
+def item_change_targets(text, business, user_id):
+    """Resolve the old item only from an unambiguous product and original option description."""
+    if not user_id or not re.search(r"\b(?:modify|change|switch)\b", text, re.I):
+        return []
+    orders = [business["orders"][key] for key in business["users"][user_id]["orders"]]
+    targets = []
+    for sentence in re.split(r"(?<=[.!?])\s+|\n", text.lower()):
+        change = re.fullmatch(
+            r"(?:please )?(?:modify|change|switch) (?:the |my )?(pending )?(.+?) to ([^.!?]+)[.]?", sentence.strip()
+        )
+        if not change or re.search(r"\b(?:not|never|except|instead|and|or)\b", change[2]):
+            continue
+        description = re.sub(r" in (?:another|the other) order$", "", change[2])
+        matches = []
+        for order in orders:
+            if order["user_id"] != user_id or order["status"] != "pending":
+                continue
+            for item in order["items"]:
+                name = item["name"].lower()
+                if description == name and change[1]:
+                    matches.append((order, item))
+                elif description.endswith(" " + name):
+                    modifier = description[:-(len(name) + 1)]
+                    if modifier in {str(value).lower() for value in item["options"].values()}:
+                        matches.append((order, item))
+        if len(matches) == 1:
+            order, item = matches[0]
+            targets.append({"order_id": order["order_id"], **item, "requested_variant": change[3]})
+    return targets
+
+
+def wrong_item_target(targets, order, args):
+    allowed = {}
+    for target in targets:
+        allowed.setdefault(target["name"], set()).add((target["order_id"], target["item_id"]))
+    for item in order["items"]:
+        scope = allowed.get(item["name"])
+        if item["item_id"] in args["item_ids"] and scope and (order["order_id"], item["item_id"]) not in scope:
+            return next(target for target in targets if target["name"] == item["name"])
+    return None
+
+
 def preserved_variant_conflicts(customer_text, business, user_id, args):
     order = business["orders"].get(args["order_id"])
     if not order or order["user_id"] != user_id:

@@ -7,12 +7,16 @@ def advisory_opening(customer_messages):
     """Abstain after unrecognized follow-ups, including revisions to the opening."""
     if not customer_messages:
         return ""
+    lookup = r"I don't remember[;.] please look through my orders\.?"
+    email = r"[\w.+-]+@[\w.-]+\.[A-Za-z]+"
     acknowledgement = re.compile(
         r"(?:I explicitly confirm the displayed proposal\.|"
         r"My email is [\w.+-]+@[\w.-]+\.[A-Za-z]+\.?|"
         r"My name is [\w' -]+, ZIP \d{5}\.?(?: Please look for the matching order in my account\.)?|"
         r"(?:Your|You) name is [\w' -]+ and your (?:email is [\w.+-]+@[\w.-]+\.[A-Za-z]+|"
         r"zip code is \d{5})\.?(?: I don't remember; please look through my orders\.)?|"
+        rf"You are [\w-]+ and {email}(?: and {email})*\.?(?: {lookup})?|"
+        rf"{lookup}|"
         r"\d{5}\.?|"
         r"ordered by mistake\.?|no longer needed\.?|"
         r"Use my (?:credit card|original payment method)\.)", re.I,

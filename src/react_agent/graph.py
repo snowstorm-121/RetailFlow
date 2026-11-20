@@ -17,7 +17,7 @@ from langgraph.runtime import Runtime
 from react_agent.context import Context
 from react_agent.state import InputState, RetailState, State
 from react_agent.tools import ASK_USER_FIELDS, RETAIL_TOOLS, TOOLS, native_dialogue_examples, retail_tools_for_session
-from retailflow.tools import IDENTITY_TOOLS, WRITE_TOOLS, valid_arguments
+from retailflow.tools import ADDRESS_TOOLS, IDENTITY_TOOLS, WRITE_TOOLS, valid_arguments
 from react_agent.utils import load_chat_model
 
 # Define the function that calls the model
@@ -162,7 +162,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
     """Build the retail loop around the template's model → tool → model pattern."""
 
     from retailflow.context import ContextBudgetExceeded, build_model_context
-    from retailflow.preproposal import address_order_candidates, false_cancellation_claim, preserved_variant_conflicts
+    from retailflow.preproposal import (address_copy_target, address_order_candidates, false_cancellation_claim,
+                                        item_change_targets, preserved_variant_conflicts, wrong_item_target)
     from retailflow.address_followups import advisory_opening, explicit_address_steps, matching_variants, processing_guarantee_fact
     from retailflow.cancel_goals import GOAL_TOOL, GOAL_PROMPT, validate_goal, goal_progress
     from retailflow.cancel_goals import GOAL_REFERENCE_TOOL, GOAL_REFERENCE_PROMPT, goal_reference_input, resolve_goal_references
@@ -186,6 +187,16 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
     def request_text(messages):
         return advisory_opening([m.content for m in messages
                                  if isinstance(m, HumanMessage) and isinstance(m.content, str)])
+
+    def address_copy_evidence(messages, opening, session):
+        if not opening or not session.get("user_id"):
+            return None
+        for message in messages:
+            if isinstance(message, ToolMessage) and message.name == "get_user_details":
+                data = json.loads(message.content).get("data")
+                if isinstance(data, dict) and data.get("user_id") == session["user_id"] and data.get("address_copy"):
+                    return data["address_copy"]
+        return address_copy_target(opening, session["business"], session["user_id"])
 
     async def retail_model(state: RetailState, runtime: Runtime[Context]):
         nonlocal proposal_repair_active, continuation_checked, focused_step
@@ -220,6 +231,17 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         outcomes = [message for message in active_messages
                     if message.additional_kwargs.get("application_result")]
         opening = request_text(active_messages)
+        copy = address_copy_evidence(active_messages, opening, session)
+        address_request = address_request or copy is not None
+        if copy:
+            destination = session["business"]["orders"][copy["destination_order_id"]]
+            account = session["business"]["users"][session["user_id"]]
+            prompt += ("\nVerified address copy roles: " + json.dumps(copy, ensure_ascii=False)
+                       + ". The source order is read-only for the copy. For the shipping proposal, use destination_order_id "
+                         "as order_id and copy every address field including country. An explicitly requested account default "
+                         "change requires a separate proposal with user_id. Continue other requested items after confirmation."
+                       + f" Shipping address already matches: {destination['address'] == copy['address']}. "
+                         f"Account address already matches: {account['address'] == copy['address']}.")
         steps = explicit_address_steps(opening) if address_request else []
         if steps:
             committed = set()
@@ -249,6 +271,10 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                          "For pending item changes, read the old item in its order, then look up that item's product_id. "
                          "Use only available catalog variant IDs. Any catalog option hits are partial evidence: verify "
                          "all requested preferences before selecting. Never invent an ID or repeat committed steps.")
+        if item_change_targets(opening, session["business"], session["user_id"]):
+            prompt += ("\nUse item_change_targets from authenticated reads to distinguish the original item_ids "
+                       "from the new_item_ids selected from that product's available variants. "
+                       "Read the selected order and product before proposing.")
         if re.search(r"\baddress\b", opening, re.I):
             prompt += ("\nIf the authenticated profile shows address_order_candidates, read the matching order before "
                        "drawing conclusions. Verify the city and requested item in that order. Address candidates are "
@@ -589,16 +615,38 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 result = {"ok": False, "code": "MISSING_USER_INFORMATION",
                           "message": "These identity values were not supplied by the customer. Call ask_user for identity; do not guess.",
                           "fields": ["identity"]}
-            elif name == "modify_pending_order_items" and valid_arguments(name, args):
+            elif name in ADDRESS_TOOLS or name == "modify_pending_order_items":
+                active = active_request(state["messages"])
+                opening = request_text(active)
                 session = environment.load_session(thread_id)
-                conflicts = preserved_variant_conflicts(request_text(active_request(state["messages"])),
-                                                        session["business"], session["user_id"], args)
-                if conflicts:
-                    result = {"ok": False, "code": "INVALID_ARGUMENT",
-                              "message": "No proposal created. The selected variant changes required unchanged options: "
-                                         + ", ".join(conflicts) + ". Check the complete catalog for an available match. "
-                                         "If none exists, follow the customer's stated fallback."}
-                else:
+                business, user_id = session["business"], session["user_id"]
+                result = None
+                if name in ADDRESS_TOOLS:
+                    copy = address_copy_evidence(active, opening, session)
+                    if copy and (name == "modify_pending_order_address" or copy["update_default"]):
+                        target = ({"order_id": copy["destination_order_id"]} if name == "modify_pending_order_address"
+                                  else {"user_id": user_id})
+                        expected = {**target, **copy["address"]}
+                        if args != expected:
+                            result = {"ok": False, "code": "INVALID_ARGUMENT",
+                                      "message": "No proposal created. Use the copy destination and every source address field.",
+                                      "data": expected}
+                elif valid_arguments(name, args):
+                    order = business["orders"].get(args["order_id"])
+                    targets = item_change_targets(opening, business, user_id)
+                    mismatch = wrong_item_target(targets, order, args) if order and order["user_id"] == user_id else None
+                    conflicts = preserved_variant_conflicts(opening, business, user_id, args)
+                    if mismatch:
+                        result = {"ok": False, "code": "INVALID_ARGUMENT",
+                                  "message": "No proposal created. The item_id below matches the requested original item; "
+                                             "read its catalog and use it in item_ids, not in new_item_ids.",
+                                  "data": mismatch}
+                    elif conflicts:
+                        result = {"ok": False, "code": "INVALID_ARGUMENT",
+                                  "message": "No proposal created. The selected variant changes required unchanged options: "
+                                             + ", ".join(conflicts) + ". Check the complete catalog for an available match. "
+                                             "If none exists, follow the customer's stated fallback."}
+                if result is None:
                     result = environment.dispatch_tool(thread_id, name, args)
             else:
                 result = environment.dispatch_tool(thread_id, name, args)
@@ -617,6 +665,40 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         if config.get("catalog_availability_facts", False) and name == "get_product_details" and result["ok"]:
             result["data"]["available_variant_count"] = sum(
                 variant["available"] is True for variant in result["data"]["variants"].values())
+        if name in {"get_order_details", "get_product_details", "get_user_details"} and result["ok"]:
+            active = active_request(state["messages"])
+            opening = request_text(active)
+            session = environment.load_session(thread_id)
+            targets = item_change_targets(opening, session["business"], session["user_id"])
+            if name == "get_user_details":
+                copy = address_copy_evidence(active, opening, session)
+                if copy:
+                    result["data"]["address_copy"] = copy
+                if targets:
+                    result["data"]["item_change_targets"] = targets
+                candidates = address_order_candidates(opening, session["business"], session["user_id"],
+                                                      result["data"]["orders"])
+                if candidates:
+                    result["data"]["address_order_candidates"] = candidates
+            elif name == "get_order_details":
+                targets = [target for target in targets if target["order_id"] == args["order_id"]]
+                if targets:
+                    result["data"]["item_change_targets"] = targets
+            else:
+                product = result["data"]
+                preferences = {target["requested_variant"] for target in targets
+                               if target["product_id"] == args["product_id"]}
+                if len(preferences) == 1:
+                    preference = preferences.pop()
+                    if preference == "the cheapest available version":
+                        available = [{"item_id": item_id, "options": variant["options"], "price": variant["price"]}
+                                     for item_id, variant in product["variants"].items() if variant["available"] is True]
+                        if available:
+                            product["available_option_hits"] = [min(available, key=lambda variant: variant["price"])]
+                    else:
+                        candidates = matching_variants(product["variants"], preference)
+                        if candidates:
+                            product["available_option_hits"] = candidates
         if name == "get_product_details" and result["ok"]:
             active = active_request(state["messages"])
             product = result["data"]
@@ -636,12 +718,6 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                             if candidates:
                                 product["available_option_hits"] = candidates
                         break
-        if name == "get_user_details" and result["ok"]:
-            session = environment.load_session(thread_id)
-            candidates = address_order_candidates(request_text(active_request(state["messages"])),
-                                                  session["business"], session["user_id"], result["data"]["orders"])
-            if candidates:
-                result["data"]["address_order_candidates"] = candidates
         if config.get("profile_order_summaries", False) and name == "get_user_details" and result["ok"]:
             session = environment.load_session(thread_id)
             result["data"]["order_summaries"] = [

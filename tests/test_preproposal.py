@@ -121,3 +121,79 @@ def test_keep_clause_survives_a_bare_zip_clarification():
     assert advisory_opening([opening, "My name is Lucas Santos, ZIP 80239. Please look for the matching order in my account."]) == opening
     assert advisory_opening([opening, "You name is Daiki Silva and your email is daiki@example.com."]) == opening
     assert advisory_opening([opening, "Actually, wood is fine."]) == ""
+
+
+def test_copy_to_old_address_keeps_source_and_destination_separate(tmp_path):
+    email = "sophia.martin4832@example.com"
+    user_id = "sophia_martin_8570"
+    source, target = "#W1092119", "#W1603792"
+    address = {"address1": "592 Elm Avenue", "address2": "Suite 978", "city": "Houston",
+               "state": "TX", "country": "USA", "zip": "77242"}
+    agent, model, config = runtime(tmp_path, [
+        call("find_user_id_by_email", {"email": email}, "identity"),
+        call("get_user_details", {"user_id": user_id}, "profile"),
+        call("modify_pending_order_address", {"order_id": source, **address}, "wrong"),
+        call("modify_pending_order_address", {"order_id": target, **{key: value for key, value in address.items()
+                                                                     if key != "country"}}, "missing-country"),
+        call("modify_pending_order_address", {"order_id": target, **address}, "right"),
+    ])
+    result = asyncio.run(agent.run_turn("copy", {"kind": "message", "text":
+        f"My email is {email}. Copy the shipping address from my luggage order to the order "
+        "still going to my old house and set it as my account default."}, config))
+    assert result["request"]["args"]["order_id"] == target
+    assert [row["code"] for row in result["usage"]["tool_attempts"]][-3:] == [
+        "INVALID_ARGUMENT", "INVALID_ARGUMENT", "CONFIRMATION_REQUIRED",
+    ]
+    profile = next(json.loads(m.content)["data"] for m in model.inputs[-1]
+                   if isinstance(m, ToolMessage) and m.name == "get_user_details")
+    assert profile["address_copy"]["source_order_id"] == source
+    assert profile["address_copy"]["destination_order_id"] == target
+    assert agent.environment.get_order("copy", target)["address"] != address
+
+
+def test_duplicate_product_proposal_targets_old_option_value_after_clarification(tmp_path):
+    user_id, email = "aarav_santos_2259", "aarav.santos8320@example.com"
+    order_id = "#W9672333"
+    original, other, replacement = "1684786391", "3778566150", "5052031638"
+    args = {"order_id": order_id, "new_item_ids": [replacement], "payment_method_id": "paypal_7664977"}
+    agent, model, config = runtime(tmp_path, [
+        call("ask_user", {"fields": ["identity", "order"], "question": "Can I get your email and order number?"}, "ask"),
+        call("find_user_id_by_email", {"email": email}, "identity"),
+        call("get_user_details", {"user_id": user_id}, "profile"),
+        call("get_order_details", {"order_id": order_id}, "read"),
+        call("modify_pending_order_items", {**args, "item_ids": [other]}, "wrong"),
+        call("modify_pending_order_items", {**args, "item_ids": [original]}, "right"),
+    ])
+
+    async def run():
+        first = await agent.run_turn("item", {"kind": "message", "text":
+            "Modify the 17-inch laptop in another order to 13-inch."}, config)
+        assert first["status"] == "needs_input"
+        return await agent.run_turn("item", {"kind": "message", "text":
+            f"You are {user_id} and aarav.santos8321@example.com and {email}. "
+            "I don't remember; please look through my orders."}, config)
+
+    result = asyncio.run(run())
+    assert result["request"]["args"]["item_ids"] == [original]
+    assert [row["code"] for row in result["usage"]["tool_attempts"]][-2:] == [
+        "INVALID_ARGUMENT", "CONFIRMATION_REQUIRED",
+    ]
+    order = next(json.loads(m.content)["data"] for m in model.inputs[-1]
+                 if isinstance(m, ToolMessage) and m.name == "get_order_details")
+    assert order["item_change_targets"][0]["item_id"] == original
+    assert order["item_change_targets"][0]["options"]["screen size"] == "17-inch"
+
+
+def test_copy_abstains_when_old_address_matches_multiple_pending_orders():
+    from copy import deepcopy
+
+    from retailflow.preproposal import address_copy_target
+    from retailflow.upstream.paths import RETAIL_DB_PATH
+
+    db = json.loads(RETAIL_DB_PATH.read_text())
+    user_id, target = "sophia_martin_8570", "#W1603792"
+    text = "Copy the shipping address from my luggage order to the order going to my old address."
+    assert address_copy_target(text, db, user_id)["destination_order_id"] == target
+    db["orders"]["#W1"] = {**deepcopy(db["orders"][target]), "order_id": "#W1"}
+    db["users"][user_id]["orders"].append("#W1")
+    assert address_copy_target(text, db, user_id) is None
