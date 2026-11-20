@@ -235,7 +235,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 eligible_statuses = {"pending", "pending (item modified)"} if next_step["tool"] == "modify_pending_order_address" else {"pending"}
                 if target.get("user_id") == session["user_id"] and target.get("status") in eligible_statuses:
                     retry_focus = (state["model_calls"] == 1 and
-                                   state["messages"][-1].additional_kwargs.get("focused_write_mismatch"))
+                                   (state["messages"][-1].additional_kwargs.get("focused_write_mismatch")
+                                    or state["messages"][-1].additional_kwargs.get("protocol_feedback") == "focused_prose"))
                     if config.get("confirmed_this_turn") and (state["model_calls"] == 0 or retry_focus):
                         focused_step = next_step
                     prompt += ("\nNext explicit step: " + json.dumps(next_step, ensure_ascii=False)
@@ -265,14 +266,18 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 prompt += (" There is no confirmed cancellation in this request. Check the customer's cancellation condition "
                            "and target separately from any address update. If eligible, call cancel_pending_order to propose; "
                            "otherwise explain why it remains unresolved. Never claim it was cancelled.")
-        examples = native_dialogue_examples()
+        context_messages = state["messages"]
+        focused_prose = focused_step and context_messages[-1].additional_kwargs.get("protocol_feedback") == "focused_prose"
+        if focused_prose:
+            context_messages = [*context_messages[:-2], context_messages[-1]]
+        examples = [] if focused_prose else native_dialogue_examples()
         example_tokens = len(json.dumps(messages_to_dict(examples))) // 4
         available = (int(runtime.context.num_ctx) - int(runtime.context.num_predict) -
                      len(json.dumps(RETAIL_TOOLS)) // 4 - len(prompt) // 4 - example_tokens - 128)
         budget = min(int(config.get("context_budget_tokens", available)), available)
         metrics["context_budget_tokens"] = budget
         try:
-            visible = build_model_context({**session, "messages": state["messages"]},
+            visible = build_model_context({**session, "messages": context_messages},
                                           {"context_budget_tokens": budget, "structured_context": config.get("structured_context", True),
                                            "required_outcome_ids": {message.id for message in outcomes} if address_request else set()})
         except ContextBudgetExceeded:
@@ -286,6 +291,9 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         if focused_step:
             offered = [tool for tool in offered if tool["function"]["name"] not in WRITE_TOOLS
                        or tool["function"]["name"] == focused_step["tool"]]
+        if focused_prose:
+            scope_tools = {focused_step["tool"], "get_user_details", "get_order_details", "get_product_details", "ask_user"}
+            offered = [tool for tool in offered if tool["function"]["name"] in scope_tools]
         if information_repair or missing_identity:
             offered = [RETAIL_TOOLS[-1]]
         if planning:
@@ -307,6 +315,23 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                               *examples, *visible]
         else:
             model_messages = [SystemMessage(content=prompt), *examples, *visible]
+        if focused_prose:
+            reads = [{"tool": message.name, "result": json.loads(message.content)}
+                     for message in visible if isinstance(message, ToolMessage)
+                     and message.name in {"get_user_details", "get_order_details", "get_product_details"}]
+            prompt = ("Continue exactly the next explicit customer operation using native tools. "
+                      "Only committed_outcomes were confirmed. The next step is unconfirmed. "
+                      "Use verified reads to propose it, or call a read tool or ask_user if a prerequisite is missing. "
+                      "If the operation is ineligible, explain why. Never claim a write without its own receipt.")
+            customer_texts = [message.content for message in active_messages
+                              if isinstance(message, HumanMessage) and isinstance(message.content, str)
+                              and message.content != "I explicitly confirm the displayed proposal."]
+            payload = {"next_step": focused_step, "customer_request": opening, "verified_reads": reads,
+                       "customer_followups": customer_texts[1:],
+                       "committed_outcomes": [message.content for message in outcomes]}
+            visible = [HumanMessage(content=json.dumps(payload, ensure_ascii=False),
+                                    additional_kwargs={"protocol_retry_input": True})]
+            model_messages = [SystemMessage(content=prompt), *visible]
         proposal_repair_active = proposal_repair_active or (
             repair == "proposal" and config.get("isolated_proposal_repair", False))
         proposal_repair = proposal_repair_active
@@ -402,6 +427,18 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                         "status": "failed", "failure_reason": "receipt_review_invalid_response"}
             return {"messages": [response], "model_calls": state["model_calls"] + 1, "status": "answered"}
         if not response.tool_calls:
+            review_budget = min(max_model_calls, config.get("episode_calls_remaining", max_model_calls))
+            if focused_step and state["model_calls"] == 0 and state["model_calls"] + 1 < review_budget:
+                continuation_checked = True
+                metrics["focused_prose_repairs"] = 1
+                feedback = SystemMessage(
+                    content="The preceding draft did not use a native tool. Work only on the next explicit step. "
+                            "Use a native call to read, request missing details, or propose the eligible write. "
+                            "If the step is genuinely ineligible, explain the reason using verified facts.",
+                    additional_kwargs={"protocol_feedback": "focused_prose"},
+                )
+                persist(state, [response, feedback])
+                return {"messages": [response, feedback], "model_calls": state["model_calls"] + 1, "status": "repairing"}
             if (progress is not None and not progress["complete"]
                     and not _requests_information(response.content)):
                 if metrics["dialogue_repairs"] >= 1:
@@ -453,7 +490,6 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 feedback = SystemMessage(content=feedback_text, additional_kwargs={"protocol_feedback": kind})
                 persist(state, [response, feedback])
                 return {"messages": [response, feedback], "model_calls": state["model_calls"] + 1, "status": "repairing"}
-            review_budget = min(max_model_calls, config.get("episode_calls_remaining", max_model_calls))
             if (address_request and outcomes and config.get("confirmed_this_turn")
                     and not continuation_checked and state["model_calls"] + 1 < review_budget):
                 continuation_checked = True

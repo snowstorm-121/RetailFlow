@@ -38,6 +38,7 @@ def test_partial_address_answer_rechecks_remaining_goal_and_requires_new_confirm
     cancel = {"order_id": "#W5995614", "reason": "ordered by mistake"}
     agent, model, config = runtime(tmp_path, [
         call("find_user_id_by_name_zip", {"first_name": "Yara", "last_name": "Muller", "zip": "85041"}, "identity"),
+        call("ask_user", {"fields": ["cancel_reason"], "question": "Why cancel the other order?"}, "reason"),
         call("modify_pending_order_address", args, "address"),
         AIMessage(content="The shipping address has been updated."),
         call("cancel_pending_order", cancel, "cancel"),
@@ -47,12 +48,21 @@ def test_partial_address_answer_rechecks_remaining_goal_and_requires_new_confirm
     async def run():
         first = await agent.run_turn("mixed", {"kind": "message", "text":
             "I'm Yara Muller ZIP 85041. Change shipping for #W5056519 to 380 Maple Drive, Suite 960, "
-            "San Diego, CA 92101, USA. Also cancel #W5995614 because I ordered it by mistake."}, config)
+            "San Diego, CA 92101, USA. Also cancel #W5995614."}, config)
+        assert first["status"] == "needs_input"
+        first = await agent.run_turn("mixed", {"kind": "message", "text": "ordered by mistake"}, config)
         second = await agent.run_turn("mixed", {"kind": "confirmation", "accepted": True,
                                                "proposal_id": first["request"]["proposal_id"]}, config)
         assert second["status"] == "needs_confirmation"
         assert second["request"]["proposal_id"] != first["request"]["proposal_id"]
         assert second["request"]["args"] == cancel
+        retry = second["usage"]["context_inputs"][-1]
+        assert {"modify_pending_order_items", "transfer_to_human_agents"}.isdisjoint(retry["tool_names"])
+        assert "The shipping address has been updated." not in str(retry["messages"])
+        assert "I explicitly confirm the displayed proposal." not in str(retry["messages"])
+        assert '"next_step"' in retry["messages"][1]["data"]["content"]
+        import json
+        assert json.loads(retry["messages"][1]["data"]["content"])["customer_followups"] == ["ordered by mistake"]
         assert agent.environment.get_order("mixed", cancel["order_id"])["status"] == "pending"
         final = await agent.run_turn("mixed", {"kind": "confirmation", "accepted": True,
                                               "proposal_id": second["request"]["proposal_id"]}, config)
@@ -169,4 +179,28 @@ def test_ineligible_next_step_does_not_hide_other_writes(tmp_path):
                                                  "proposal_id": result["request"]["proposal_id"]}, config)
         assert result["status"] == "answered"
         assert "return_delivered_order_items" in result["usage"]["context_inputs"][0]["tool_names"]
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("label", ["credit card", "account"])
+def test_confirmed_item_change_corrects_real_charge_wording(tmp_path, label):
+    change = {"order_id": "#W5056519", "item_ids": ["7902309762"],
+              "new_item_ids": ["1573035764"], "payment_method_id": "credit_card_3095586"}
+    draft = f"The makeup kit was updated. Price difference: $10.36 (charged to your {label}). Credit card ending in 3095586."
+    agent, _, config = runtime(tmp_path, [
+        call("find_user_id_by_name_zip", {"first_name": "Yara", "last_name": "Muller", "zip": "85041"}, "identity"),
+        call("modify_pending_order_items", change, "items"),
+        AIMessage(content=draft),
+    ])
+
+    async def run():
+        proposal = await agent.run_turn("payment", {"kind": "message", "text":
+            "I'm Yara Muller ZIP 85041. Change my makeup kit to dark Brand A."}, config)
+        result = await agent.run_turn("payment", {"kind": "confirmation", "accepted": True,
+                                                   "proposal_id": proposal["request"]["proposal_id"]}, config)
+        assert "charged to your" not in result["text"]
+        assert "Credit card ending in 6918" in result["text"]
+        assert "$10.36" in result["text"]
+        assert "No real payment was sent" in result["text"]
+        assert result["usage"]["original_model_answer"] == draft
     asyncio.run(run())

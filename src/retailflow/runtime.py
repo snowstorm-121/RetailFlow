@@ -288,6 +288,32 @@ class RetailRuntime:
                     "This local application sends no real email and does not ship replacements.")
             messages.append(AIMessage(content=text, additional_kwargs={"application_rendered_receipt": True}))
             metrics["application_rendered_receipt"] = True
+        if status == "answered":
+            for message in reversed(messages):
+                if message.additional_kwargs.get("request_start"):
+                    break
+                if message.additional_kwargs.get("committed_tool") != "modify_pending_order_items":
+                    continue
+                receipt = json.loads(message.content.removeprefix("Application outcome: "))
+                if receipt.get("modification_details", {}).get("real_payment_sent") is False:
+                    corrected = re.sub(r"\(charged to (?:your|the) (?:credit card|account)\)",
+                                       "(recorded in the simulator)", text, flags=re.I)
+                    if corrected != text:
+                        corrected += " No real payment was sent."
+                    method_id = receipt["modification_details"]["simulated_payment"]["payment_method_id"]
+                    token = method_id.rsplit("_", 1)[-1]
+                    if token.isdecimal() and re.search(rf"\bending in {token}\b", corrected, re.I):
+                        session = self.environment.load_session(thread_id)
+                        payment = session["business"]["users"][session["user_id"]]["payment_methods"].get(method_id, {})
+                        if payment.get("source") == "credit_card" and payment.get("last_four"):
+                            corrected = re.sub(rf"(\bending in ){token}\b",
+                                               lambda match: match[1] + payment["last_four"], corrected, flags=re.I)
+                    if corrected != text:
+                        metrics["original_model_answer"] = text
+                        text = corrected
+                        messages.append(AIMessage(content=text, additional_kwargs={"application_rendered_receipt": True}))
+                        metrics["application_rendered_receipt"] = True
+                    break
         if confirmed_outcome and status in {"failed", "budget_exceeded"}:
             text = "The confirmed action is committed in the local business state. Reply generation stopped: " + text
         self._save_messages(thread_id, messages)
