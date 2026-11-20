@@ -57,6 +57,10 @@ def address_copy_target(text, business, user_id):
     )
     if not copy or not user_id:
         return None
+    other_text = text[:copy.start()] + "\n" + text[copy.end():]
+    if re.search(r"\b(?:copy|change|update|modify|switch|set|send|ship)\b[^.!?\n]*"
+                 r"\b(?:address|account default)\b", other_text, re.I):
+        return None
     user = business["users"][user_id]
     orders = [business["orders"][key] for key in user["orders"]]
     owned = [order for order in orders if order["user_id"] == user_id]
@@ -74,12 +78,23 @@ def address_copy_target(text, business, user_id):
             "address": source["address"], "update_default": bool(copy[2])}
 
 
+def item_order_excluded(text, order_id):
+    """Check an explicit order exclusion even when the alternative cannot be identified."""
+    return (
+        len(re.findall(r"\b(?:modify|change|switch|replace|update)\b", text, re.I)) == 1
+        and order_id.lower() in re.findall(r"#w\d+", text.lower())
+        and bool(re.search(r"(?:^|[.!?]\s+)(?:please )?(?:modify|change|switch) "
+                           r"[^.!?]+ in (?:another|the other) order to ", text, re.I))
+    )
+
+
 def item_change_targets(text, business, user_id):
     """Resolve the old item only from an unambiguous product and original option description."""
     if not user_id or not re.search(r"\b(?:modify|change|switch)\b", text, re.I):
         return []
     orders = [business["orders"][key] for key in business["users"][user_id]["orders"]]
     targets = []
+    order_references = set(re.findall(r"#w\d+", text.lower()))
     for sentence in re.split(r"(?<=[.!?])\s+|\n", text.lower()):
         change = re.fullmatch(
             r"(?:please )?(?:modify|change|switch) (?:the |my )?(pending )?(.+?) to ([^.!?]+)[.]?", sentence.strip()
@@ -87,9 +102,10 @@ def item_change_targets(text, business, user_id):
         if not change or re.search(r"\b(?:not|never|except|instead|and|or)\b", change[2]):
             continue
         description = re.sub(r" in (?:another|the other) order$", "", change[2])
+        excluded = order_references if description != change[2] else set()
         matches = []
         for order in orders:
-            if order["user_id"] != user_id or order["status"] != "pending":
+            if order["user_id"] != user_id or order["status"] != "pending" or order["order_id"].lower() in excluded:
                 continue
             for item in order["items"]:
                 name = item["name"].lower()
@@ -105,7 +121,12 @@ def item_change_targets(text, business, user_id):
     return targets
 
 
-def wrong_item_target(targets, order, args):
+def wrong_item_target(text, targets, order, args):
+    if len(targets) == 1 and len(re.findall(r"\b(?:modify|change|switch|replace|update)\b", text, re.I)) == 1:
+        target = targets[0]
+        if (args["order_id"], args["item_ids"]) != (target["order_id"], [target["item_id"]]):
+            return target
+        return None
     allowed = {}
     for target in targets:
         allowed.setdefault(target["name"], set()).add((target["order_id"], target["item_id"]))
@@ -113,6 +134,20 @@ def wrong_item_target(targets, order, args):
         scope = allowed.get(item["name"])
         if item["item_id"] in args["item_ids"] and scope and (order["order_id"], item["item_id"]) not in scope:
             return next(target for target in targets if target["name"] == item["name"])
+    return None
+
+
+def requested_variants(variants, preference):
+    """Return available matches for a literal option or lowest price, or None for a free-form request."""
+    available = [{"item_id": item_id, "options": variant["options"], "price": variant["price"]}
+                 for item_id, variant in variants.items() if variant["available"] is True]
+    if preference == "the cheapest available version":
+        lowest = min((variant["price"] for variant in available), default=None)
+        return [variant for variant in available if variant["price"] == lowest]
+    if any(preference in {str(value).lower() for value in variant["options"].values()}
+           for variant in variants.values()):
+        return [variant for variant in available
+                if preference in {str(value).lower() for value in variant["options"].values()}]
     return None
 
 

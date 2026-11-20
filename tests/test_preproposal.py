@@ -161,9 +161,13 @@ def test_duplicate_product_proposal_targets_old_option_value_after_clarification
         call("find_user_id_by_email", {"email": email}, "identity"),
         call("get_user_details", {"user_id": user_id}, "profile"),
         call("get_order_details", {"order_id": order_id}, "read"),
+        call("modify_pending_order_items", {**args, "item_ids": ["3714494375"],
+                                           "new_item_ids": ["3709608322"]}, "wrong-product"),
         call("modify_pending_order_items", {**args, "item_ids": [other]}, "wrong"),
+        call("modify_pending_order_items", {**args, "item_ids": [original],
+                                           "new_item_ids": ["2216662955"]}, "wrong-size"),
         call("modify_pending_order_items", {**args, "item_ids": [original]}, "right"),
-    ])
+    ], max_model_calls_per_turn=8)
 
     async def run():
         first = await agent.run_turn("item", {"kind": "message", "text":
@@ -175,8 +179,9 @@ def test_duplicate_product_proposal_targets_old_option_value_after_clarification
 
     result = asyncio.run(run())
     assert result["request"]["args"]["item_ids"] == [original]
-    assert [row["code"] for row in result["usage"]["tool_attempts"]][-2:] == [
-        "INVALID_ARGUMENT", "CONFIRMATION_REQUIRED",
+    assert result["request"]["args"]["new_item_ids"] == [replacement]
+    assert [row["code"] for row in result["usage"]["tool_attempts"]][-4:] == [
+        "INVALID_ARGUMENT", "INVALID_ARGUMENT", "INVALID_ARGUMENT", "CONFIRMATION_REQUIRED",
     ]
     order = next(json.loads(m.content)["data"] for m in model.inputs[-1]
                  if isinstance(m, ToolMessage) and m.name == "get_order_details")
@@ -197,3 +202,99 @@ def test_copy_abstains_when_old_address_matches_multiple_pending_orders():
     db["orders"]["#W1"] = {**deepcopy(db["orders"][target]), "order_id": "#W1"}
     db["users"][user_id]["orders"].append("#W1")
     assert address_copy_target(text, db, user_id) is None
+
+
+def test_shipping_copy_does_not_stage_an_unrequested_account_change(tmp_path):
+    email, user_id = "sophia.martin4832@example.com", "sophia_martin_8570"
+    address = {"address1": "592 Elm Avenue", "address2": "Suite 978", "city": "Houston",
+               "state": "TX", "country": "USA", "zip": "77242"}
+    agent, _, config = runtime(tmp_path, [
+        call("find_user_id_by_email", {"email": email}, "identity"),
+        call("modify_user_address", {"user_id": user_id, **address}, "wrong"),
+        call("modify_pending_order_address", {"order_id": "#W1603792", **address}, "right"),
+    ])
+    result = asyncio.run(agent.run_turn("shipping-only", {"kind": "message", "text":
+        f"My email is {email}. Copy the shipping address from my luggage order to the order "
+        "still going to my old house."}, config))
+    assert result["request"]["name"] == "modify_pending_order_address"
+    assert result["usage"]["tool_attempts"][-2]["code"] == "INVALID_ARGUMENT"
+
+
+def test_copy_evidence_survives_account_commit_without_a_profile_read(tmp_path):
+    email, user_id = "sophia.martin4832@example.com", "sophia_martin_8570"
+    source, target = "#W1092119", "#W1603792"
+    address = {"address1": "592 Elm Avenue", "address2": "Suite 978", "city": "Houston",
+               "state": "TX", "country": "USA", "zip": "77242"}
+    agent, _, config = runtime(tmp_path, [
+        call("find_user_id_by_email", {"email": email}, "identity"),
+        call("modify_user_address", {"user_id": user_id, **address}, "default"),
+        call("modify_pending_order_address", {"order_id": source, **address, "address1": "12 Other St"}, "wrong"),
+        call("modify_pending_order_address", {"order_id": target, **address}, "shipping"),
+    ])
+
+    async def run():
+        first = await agent.run_turn("persist", {"kind": "message", "text":
+            f"My email is {email}. Copy the shipping address from my luggage order to the order "
+            "still going to my old house and set it as my account default."}, config)
+        assert first["request"]["name"] == "modify_user_address"
+        return await agent.run_turn("persist", {"kind": "confirmation", "accepted": True,
+                                                "proposal_id": first["request"]["proposal_id"]}, config)
+
+    result = asyncio.run(run())
+    assert result["request"]["args"]["order_id"] == target
+    assert result["usage"]["tool_attempts"][-2]["code"] == "INVALID_ARGUMENT"
+    assert agent.environment.get_order("persist", source)["address"] == address
+
+
+def test_copy_abstains_if_a_separate_address_change_is_explicit():
+    from retailflow.preproposal import address_copy_target
+    from retailflow.upstream.paths import RETAIL_DB_PATH
+
+    db = json.loads(RETAIL_DB_PATH.read_text())
+    text = ("Copy the shipping address from my luggage order to the order going to my old address. "
+            "Also change the address for order #W1092119 to 129 Main St.")
+    assert address_copy_target(text, db, "sophia_martin_8570") is None
+
+
+def test_item_hint_abstains_on_a_conflicting_another_order_reference():
+    from retailflow.preproposal import item_change_targets
+    from retailflow.upstream.paths import RETAIL_DB_PATH
+
+    db = json.loads(RETAIL_DB_PATH.read_text())
+    text = "Check order #W9672333. Modify the 17-inch laptop in another order to 13-inch."
+    assert item_change_targets(text, db, "aarav_santos_2259") == []
+
+
+
+def test_cheapest_available_variant_is_checked_before_proposing(tmp_path):
+    email = "sophia.martin4832@example.com"
+    args = {"order_id": "#W1603792", "item_ids": ["6501071631"], "payment_method_id": "credit_card_5694100"}
+    agent, _, config = runtime(tmp_path, [
+        call("find_user_id_by_email", {"email": email}, "identity"),
+        call("get_order_details", {"order_id": args["order_id"]}, "order"),
+        call("get_product_details", {"product_id": "8024098596"}, "catalog"),
+        call("modify_pending_order_items", {**args, "new_item_ids": ["4615543240"]}, "wrong"),
+        call("modify_pending_order_items", {**args, "new_item_ids": ["2106335193"]}, "right"),
+    ])
+    result = asyncio.run(agent.run_turn("cheapest", {"kind": "message", "text":
+        f"My email is {email}. Change my pending tablet to the cheapest available version."}, config))
+    assert result["request"]["args"]["new_item_ids"] == ["2106335193"]
+    assert result["usage"]["tool_attempts"][-2]["code"] == "INVALID_ARGUMENT"
+
+
+def test_another_order_cannot_propose_a_change_to_the_referenced_order(tmp_path):
+    email = "aarav.santos8320@example.com"
+    order_id = "#W9672333"
+    agent, _, config = runtime(tmp_path, [
+        call("find_user_id_by_email", {"email": email}, "identity"),
+        call("modify_pending_order_items", {"order_id": order_id, "item_ids": ["1684786391"],
+                                           "new_item_ids": ["5052031638"],
+                                           "payment_method_id": "paypal_7664977"}, "wrong"),
+        AIMessage(content="I could not verify the other order."),
+    ])
+    result = asyncio.run(agent.run_turn("another", {"kind": "message", "text":
+        f"My email is {email}. Check order {order_id}. Modify the 17-inch laptop in another order to 13-inch."},
+        config))
+    assert result["status"] == "answered"
+    assert result["usage"]["tool_attempts"][-1]["code"] == "INVALID_ARGUMENT"
+    assert agent.environment.pending_proposal("another") is None

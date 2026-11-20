@@ -163,7 +163,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
 
     from retailflow.context import ContextBudgetExceeded, build_model_context
     from retailflow.preproposal import (address_copy_target, address_order_candidates, false_cancellation_claim,
-                                        item_change_targets, preserved_variant_conflicts, wrong_item_target)
+                                        item_change_targets, item_order_excluded, preserved_variant_conflicts,
+                                        requested_variants, wrong_item_target)
     from retailflow.address_followups import advisory_opening, explicit_address_steps, matching_variants, processing_guarantee_fact
     from retailflow.cancel_goals import GOAL_TOOL, GOAL_PROMPT, validate_goal, goal_progress
     from retailflow.cancel_goals import GOAL_REFERENCE_TOOL, GOAL_REFERENCE_PROMPT, goal_reference_input, resolve_goal_references
@@ -192,6 +193,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         if not opening or not session.get("user_id"):
             return None
         for message in messages:
+            if message.additional_kwargs.get("address_copy_user_id") == session["user_id"]:
+                return message.additional_kwargs["address_copy"]
             if isinstance(message, ToolMessage) and message.name == "get_user_details":
                 data = json.loads(message.content).get("data")
                 if isinstance(data, dict) and data.get("user_id") == session["user_id"] and data.get("address_copy"):
@@ -566,6 +569,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         name, args = call["name"], call["args"]
         start = time.perf_counter()
         retries = 0
+        copy = None
         focused_mismatch = bool(focused_step and name in WRITE_TOOLS
                                 and (name, args.get("order_id")) != (focused_step["tool"], focused_step["order_id"]))
         if focused_mismatch:
@@ -623,7 +627,10 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 result = None
                 if name in ADDRESS_TOOLS:
                     copy = address_copy_evidence(active, opening, session)
-                    if copy and (name == "modify_pending_order_address" or copy["update_default"]):
+                    if copy and name == "modify_user_address" and not copy["update_default"]:
+                        result = {"ok": False, "code": "INVALID_ARGUMENT",
+                                  "message": "No proposal created. The customer only requested a shipping address change."}
+                    elif copy:
                         target = ({"order_id": copy["destination_order_id"]} if name == "modify_pending_order_address"
                                   else {"user_id": user_id})
                         expected = {**target, **copy["address"]}
@@ -634,9 +641,13 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 elif valid_arguments(name, args):
                     order = business["orders"].get(args["order_id"])
                     targets = item_change_targets(opening, business, user_id)
-                    mismatch = wrong_item_target(targets, order, args) if order and order["user_id"] == user_id else None
+                    mismatch = wrong_item_target(opening, targets, order, args) if order and order["user_id"] == user_id else None
                     conflicts = preserved_variant_conflicts(opening, business, user_id, args)
-                    if mismatch:
+                    if order and order["user_id"] == user_id and item_order_excluded(opening, args["order_id"]):
+                        result = {"ok": False, "code": "INVALID_ARGUMENT",
+                                  "message": "No proposal created. The customer requested an item in another order. "
+                                             "Read or clarify that order before proposing a change."}
+                    elif mismatch:
                         result = {"ok": False, "code": "INVALID_ARGUMENT",
                                   "message": "No proposal created. The item_id below matches the requested original item; "
                                              "read its catalog and use it in item_ids, not in new_item_ids.",
@@ -646,6 +657,19 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                                   "message": "No proposal created. The selected variant changes required unchanged options: "
                                              + ", ".join(conflicts) + ". Check the complete catalog for an available match. "
                                              "If none exists, follow the customer's stated fallback."}
+                    else:
+                        for old_id, new_id in zip(args["item_ids"], args["new_item_ids"]):
+                            target = next((target for target in targets if target["order_id"] == args["order_id"]
+                                           and target["item_id"] == old_id), None)
+                            if target:
+                                variants = business["products"][target["product_id"]]["variants"]
+                                choices = requested_variants(variants, target["requested_variant"])
+                                if choices and new_id not in {choice["item_id"] for choice in choices}:
+                                    result = {"ok": False, "code": "INVALID_ARGUMENT",
+                                              "message": "No proposal created. The replacement misses the requested catalog requirement.",
+                                              "data": {"requested_variant": target["requested_variant"],
+                                                       "available_option_hits": choices[:8]}}
+                                    break
                 if result is None:
                     result = environment.dispatch_tool(thread_id, name, args)
             else:
@@ -690,15 +714,9 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                                if target["product_id"] == args["product_id"]}
                 if len(preferences) == 1:
                     preference = preferences.pop()
-                    if preference == "the cheapest available version":
-                        available = [{"item_id": item_id, "options": variant["options"], "price": variant["price"]}
-                                     for item_id, variant in product["variants"].items() if variant["available"] is True]
-                        if available:
-                            product["available_option_hits"] = [min(available, key=lambda variant: variant["price"])]
-                    else:
-                        candidates = matching_variants(product["variants"], preference)
-                        if candidates:
-                            product["available_option_hits"] = candidates
+                    candidates = requested_variants(product["variants"], preference)
+                    if candidates:
+                        product["available_option_hits"] = candidates[:8]
         if name == "get_product_details" and result["ok"]:
             active = active_request(state["messages"])
             product = result["data"]
@@ -728,9 +746,11 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 if (order := session["business"]["orders"][order_id])["user_id"] == session["user_id"]]
         metrics["tool_seconds"] += time.perf_counter() - start
         metrics["tool_calls"] += 1 + retries
+        metadata = {"focused_write_mismatch": True} if focused_mismatch else {}
+        if copy and status == "needs_confirmation" and name in ADDRESS_TOOLS:
+            metadata.update(address_copy=copy, address_copy_user_id=session["user_id"])
         message = ToolMessage(content=json.dumps(result, ensure_ascii=False), name=name, tool_call_id=call["id"],
-                              status="success" if result["ok"] else "error",
-                              additional_kwargs={"focused_write_mismatch": True} if focused_mismatch else {})
+                              status="success" if result["ok"] else "error", additional_kwargs=metadata)
         persist(state, [message])
         return {"messages": [message], "status": status, "request": request}
 
