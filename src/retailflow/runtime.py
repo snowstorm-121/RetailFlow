@@ -125,7 +125,7 @@ class RetailRuntime:
                 status, text = "refused", "The proposed action was declined; no business change was made."
             else:
                 if receipt:
-                    outcome = receipt
+                    outcome = receipt["result"]
                     metrics["recovered_receipt"] = True
                 else:
                     tool_start = time.perf_counter()
@@ -137,7 +137,7 @@ class RetailRuntime:
                 if outcome["ok"]:
                     confirmed_outcome = outcome
                 messages.append(HumanMessage(content="I explicitly confirm the displayed proposal."))
-                action_name = pending["name"] if pending else "the previous action"
+                action_name = receipt["name"] if receipt else pending["name"]
                 summary = {"name": action_name, "ok": outcome["ok"], "code": outcome["code"],
                            "order_id": pending["args"].get("order_id") if pending else outcome.get("data", {}).get("order_id")}
                 if isinstance(outcome.get("data"), dict):

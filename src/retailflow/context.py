@@ -9,7 +9,7 @@ VISIBLE_FIELDS = {"order_id", "user_id", "status", "items", "item_id", "product_
                   "price", "quantity", "payment_methods", "payment_method_id", "payment_history",
                   "return_items", "return_payment_method_id", "cancel_reason", "balance", "address",
                   "first_name", "last_name", "zip", "address1", "address2", "city", "state", "country", "email", "fulfillments", "tracking_id", "code", "ok",
-                  "proposal_id", "reason", "data", "orders", "order_summaries", "source", "id", "last_four",
+                  "proposal_id", "reason", "data", "orders", "order_summaries", "address_order_candidates", "matched_terms", "source", "id", "last_four",
                   "transaction_type", "amount", "variants", "options", "available", "message", "fields", "question",
                   "scope", "order_ids", "source_quote", "available_variant_count", "available_option_hits", "matched_options", "exchange_items",
                   "exchange_new_items", "exchange_payment_method_id", "exchange_price_difference"}

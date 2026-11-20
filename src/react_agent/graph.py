@@ -162,6 +162,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
     """Build the retail loop around the template's model → tool → model pattern."""
 
     from retailflow.context import ContextBudgetExceeded, build_model_context
+    from retailflow.preproposal import address_order_candidates, false_cancellation_claim, preserved_variant_conflicts
     from retailflow.address_followups import advisory_opening, explicit_address_steps, matching_variants, processing_guarantee_fact
     from retailflow.cancel_goals import GOAL_TOOL, GOAL_PROMPT, validate_goal, goal_progress
     from retailflow.cancel_goals import GOAL_REFERENCE_TOOL, GOAL_REFERENCE_PROMPT, goal_reference_input, resolve_goal_references
@@ -248,6 +249,10 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                          "For pending item changes, read the old item in its order, then look up that item's product_id. "
                          "Use only available catalog variant IDs. Any catalog option hits are partial evidence: verify "
                          "all requested preferences before selecting. Never invent an ID or repeat committed steps.")
+        if re.search(r"\baddress\b", opening, re.I):
+            prompt += ("\nIf the authenticated profile shows address_order_candidates, read the matching order before "
+                       "drawing conclusions. Verify the city and requested item in that order. Address candidates are "
+                       "search hints, not evidence that a shipping or account address should be changed.")
         deadline_fact = processing_guarantee_fact(opening)
         if deadline_fact:
             prompt += "\n" + deadline_fact
@@ -502,12 +507,16 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 )
                 persist(state, [response, feedback])
                 return {"messages": [response, feedback], "model_calls": state["model_calls"] + 1, "status": "repairing"}
-            if (cancel_requested and outcomes and not has_cancel_receipt and isinstance(text, str)
-                    and re.search(r"\bcancellation\b[^.!?\n]{0,90}\b(?:was|has been|is now)\s+(?:initiated|confirmed|completed|processed)"
-                                  r"|\b(?:was|were|has been|have been|successfully)\s+cancel(?:l)?ed\b"
-                                  r"|#W\d+[*`_]*\s+cancel(?:l)?ed\b", text, re.I)):
-                return {"messages": [response], "model_calls": state["model_calls"] + 1,
-                        "status": "failed", "failure_reason": "unverified_cancellation_claim"}
+            if isinstance(text, str) and session.get("user_id"):
+                cancelled_orders = {
+                    json.loads(message.content.removeprefix("Application outcome: ")).get("order_id")
+                    for message in outcomes
+                    if message.additional_kwargs.get("committed_tool") == "cancel_pending_order"
+                }
+                if false_cancellation_claim(text, session["business"], session["user_id"], cancelled_orders,
+                                            unresolved_cancellation=bool(cancel_requested and outcomes and not cancelled_orders)):
+                    return {"messages": [response], "model_calls": state["model_calls"] + 1,
+                            "status": "failed", "failure_reason": "unverified_cancellation_claim"}
         if (not response.tool_calls and config.get("receipt_answer_review", False)
                 and not metrics["receipt_reviews"] and session.get("target_order_status") == "return requested"
                 and any(m.additional_kwargs.get("application_result") for m in state["messages"])):
@@ -580,6 +589,17 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 result = {"ok": False, "code": "MISSING_USER_INFORMATION",
                           "message": "These identity values were not supplied by the customer. Call ask_user for identity; do not guess.",
                           "fields": ["identity"]}
+            elif name == "modify_pending_order_items" and valid_arguments(name, args):
+                session = environment.load_session(thread_id)
+                conflicts = preserved_variant_conflicts(request_text(active_request(state["messages"])),
+                                                        session["business"], session["user_id"], args)
+                if conflicts:
+                    result = {"ok": False, "code": "INVALID_ARGUMENT",
+                              "message": "No proposal created. The selected variant changes required unchanged options: "
+                                         + ", ".join(conflicts) + ". Check the complete catalog for an available match. "
+                                         "If none exists, follow the customer's stated fallback."}
+                else:
+                    result = environment.dispatch_tool(thread_id, name, args)
             else:
                 result = environment.dispatch_tool(thread_id, name, args)
             metrics["tool_attempts"].append({"tool_call_id": call["id"], "name": name, "args": args,
@@ -616,6 +636,12 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                             if candidates:
                                 product["available_option_hits"] = candidates
                         break
+        if name == "get_user_details" and result["ok"]:
+            session = environment.load_session(thread_id)
+            candidates = address_order_candidates(request_text(active_request(state["messages"])),
+                                                  session["business"], session["user_id"], result["data"]["orders"])
+            if candidates:
+                result["data"]["address_order_candidates"] = candidates
         if config.get("profile_order_summaries", False) and name == "get_user_details" and result["ok"]:
             session = environment.load_session(thread_id)
             result["data"]["order_summaries"] = [

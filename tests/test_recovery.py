@@ -205,7 +205,7 @@ def test_replayed_confirmation_after_committed_write_does_not_write_twice(tmp_pa
             return self
 
         async def ainvoke(self, messages, **_):
-            return AIMessage(content="The confirmed order cancellation is recorded.")
+            return AIMessage(content="I canceled order #W5056519.")
 
     reopened = RetailRuntime(tmp_path / "business.sqlite", tmp_path / "traces", model_factory=lambda _: FinalModel())
     replay = asyncio.run(reopened.run_turn("a", {"kind": "confirmation", "proposal_id": first["request"]["proposal_id"],

@@ -94,6 +94,9 @@ def test_optional_completion_check_preserves_last_budgeted_answer(tmp_path):
 
 @pytest.mark.parametrize("claim", [
     "Cancellation of order #W5995614 was initiated.",
+    "The address was updated. Your order was successfully canceled.",
+    "The address was updated. The cancellation was completed.",
+    "The address was updated, and order #W5995614 was canceled.",
     "**#W5995614** canceled with refund of $164.28.",
 ])
 def test_followup_cannot_report_cancellation_without_receipt(tmp_path, claim):

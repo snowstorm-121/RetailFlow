@@ -10,7 +10,10 @@ def advisory_opening(customer_messages):
     acknowledgement = re.compile(
         r"(?:I explicitly confirm the displayed proposal\.|"
         r"My email is [\w.+-]+@[\w.-]+\.[A-Za-z]+\.?|"
-        r"My name is [\w' -]+, ZIP \d{5}\.?|"
+        r"My name is [\w' -]+, ZIP \d{5}\.?(?: Please look for the matching order in my account\.)?|"
+        r"(?:Your|You) name is [\w' -]+ and your (?:email is [\w.+-]+@[\w.-]+\.[A-Za-z]+|"
+        r"zip code is \d{5})\.?(?: I don't remember; please look through my orders\.)?|"
+        r"\d{5}\.?|"
         r"ordered by mistake\.?|no longer needed\.?|"
         r"Use my (?:credit card|original payment method)\.)", re.I,
     )
