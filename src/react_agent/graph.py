@@ -245,6 +245,19 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                          "change requires a separate proposal with user_id. Continue other requested items after confirmation."
                        + f" Shipping address already matches: {destination['address'] == copy['address']}. "
                          f"Account address already matches: {account['address'] == copy['address']}.")
+            retry_focus = state["model_calls"] == 1 and (
+                state["messages"][-1].additional_kwargs.get("focused_write_mismatch")
+                or state["messages"][-1].additional_kwargs.get("protocol_feedback") == "focused_prose")
+            if config.get("confirmed_this_turn") and outcomes and (state["model_calls"] == 0 or retry_focus):
+                if (destination["address"] != copy["address"] and destination["status"] in
+                        {"pending", "pending (item modified)"}):
+                    focused_step = {"tool": "modify_pending_order_address", "order_id": copy["destination_order_id"],
+                                    **copy["address"]}
+                elif copy["update_default"] and account["address"] != copy["address"]:
+                    focused_step = {"tool": "modify_user_address", "user_id": session["user_id"], **copy["address"]}
+                if focused_step:
+                    prompt += ("\nThe confirmed action is complete. Propose this remaining address change separately: "
+                               + json.dumps(focused_step, ensure_ascii=False))
         steps = explicit_address_steps(opening) if address_request else []
         if steps:
             committed = set()
@@ -263,7 +276,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                     retry_focus = (state["model_calls"] == 1 and
                                    (state["messages"][-1].additional_kwargs.get("focused_write_mismatch")
                                     or state["messages"][-1].additional_kwargs.get("protocol_feedback") == "focused_prose"))
-                    if config.get("confirmed_this_turn") and (state["model_calls"] == 0 or retry_focus):
+                    if focused_step is None and config.get("confirmed_this_turn") and (state["model_calls"] == 0 or retry_focus):
                         focused_step = next_step
                     prompt += ("\nNext explicit step: " + json.dumps(next_step, ensure_ascii=False)
                                + ". Check business prerequisites and use a read tool or ask_user if needed. "
@@ -274,7 +287,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                          "For pending item changes, read the old item in its order, then look up that item's product_id. "
                          "Use only available catalog variant IDs. Any catalog option hits are partial evidence: verify "
                          "all requested preferences before selecting. Never invent an ID or repeat committed steps.")
-        if item_change_targets(opening, session["business"], session["user_id"]):
+        item_targets = item_change_targets(opening, session["business"], session["user_id"])
+        if item_targets:
             prompt += ("\nUse item_change_targets from authenticated reads to distinguish the original item_ids "
                        "from the new_item_ids selected from that product's available variants. "
                        "Read the selected order and product before proposing.")
@@ -330,6 +344,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             offered = [tool for tool in offered if tool["function"]["name"] in scope_tools]
         if information_repair or missing_identity:
             offered = [RETAIL_TOOLS[-1]]
+        if repair == "read_pending_orders":
+            offered = [tool for tool in offered if tool["function"]["name"] == "get_user_details"]
         if planning:
             offered = [GOAL_REFERENCE_TOOL if config.get("cancel_goal_references", False) else GOAL_TOOL]
         model = model_factory(runtime.context).bind_tools(offered)
@@ -493,6 +509,19 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 return {"messages": [response], "model_calls": state["model_calls"] + 1,
                         "status": "failed", "failure_reason": "information_request_not_structured"}
             text = response.content
+            if (item_targets and isinstance(text, str) and isinstance(latest, ToolMessage)
+                    and latest.name in IDENTITY_TOOLS and latest.status == "success"
+                    and metrics["dialogue_repairs"] == 0 and state["model_calls"] + 1 < review_budget
+                    and re.search(r"\b(?:I will (?:now )?(?:retrieve|check|search|look up)|please wait while I (?:search|check))\b",
+                                  text, re.I)):
+                metrics["dialogue_repairs"] += 1
+                feedback = SystemMessage(
+                    content=f"Authentication succeeded. Call get_user_details for {session['user_id']} "
+                            "to look up the orders now. Do not tell the customer to wait.",
+                    additional_kwargs={"protocol_feedback": "read_pending_orders"},
+                )
+                persist(state, [response, feedback])
+                return {"messages": [response, feedback], "model_calls": state["model_calls"] + 1, "status": "repairing"}
             address_confirmation = (isinstance(text, str) and re.search(r"\b(?:address|suite|shipping)\b", text, re.I)
                                     and re.search(r"\b(?:change|chang(?:ing|ed)|updat\w*|modify|proceed)\b", text, re.I))
             proposal_missing = (isinstance(text, str) and session.get("user_id")
@@ -570,11 +599,12 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         start = time.perf_counter()
         retries = 0
         copy = None
-        focused_mismatch = bool(focused_step and name in WRITE_TOOLS
-                                and (name, args.get("order_id")) != (focused_step["tool"], focused_step["order_id"]))
+        focused_key = "user_id" if focused_step and "user_id" in focused_step else "order_id"
+        focused_mismatch = bool(focused_step and name in WRITE_TOOLS and
+                                (name, args.get(focused_key)) != (focused_step["tool"], focused_step[focused_key]))
         if focused_mismatch:
             result = {"ok": False, "code": "INVALID_ARGUMENT",
-                      "message": f"The next explicit step is {focused_step['tool']} for {focused_step['order_id']}. "
+                      "message": f"The next explicit step is {focused_step['tool']} for {focused_step[focused_key]}. "
                                  "This rejected call did not undo any confirmed action. Read or clarify the target if needed."}
             metrics["tool_attempts"].append({"tool_call_id": call["id"], "name": name, "args": args,
                                              "code": result["code"], "message": result["message"], "attempt": 1})

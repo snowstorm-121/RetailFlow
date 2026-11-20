@@ -298,3 +298,65 @@ def test_another_order_cannot_propose_a_change_to_the_referenced_order(tmp_path)
     assert result["status"] == "answered"
     assert result["usage"]["tool_attempts"][-1]["code"] == "INVALID_ARGUMENT"
     assert agent.environment.pending_proposal("another") is None
+
+
+def test_confirming_tablet_change_leaves_two_separately_confirmed_addresses(tmp_path):
+    email, user_id = "sophia.martin4832@example.com", "sophia_martin_8570"
+    order_id = "#W1603792"
+    address = {"address1": "592 Elm Avenue", "address2": "Suite 978", "city": "Houston",
+               "state": "TX", "country": "USA", "zip": "77242"}
+    tablet = {"order_id": order_id, "item_ids": ["6501071631"], "new_item_ids": ["2106335193"],
+              "payment_method_id": "credit_card_5694100"}
+    agent, model, config = runtime(tmp_path, [
+        call("find_user_id_by_email", {"email": email}, "identity"),
+        call("get_user_details", {"user_id": user_id}, "profile"),
+        call("modify_pending_order_items", tablet, "tablet"),
+        call("modify_pending_order_items", {**tablet, "new_item_ids": ["2106335199"]}, "repeat-tablet"),
+        call("modify_pending_order_address", {"order_id": order_id, **address}, "shipping"),
+        call("modify_user_address", {"user_id": user_id, **address}, "default"),
+        AIMessage(content="Both addresses were updated."),
+        AIMessage(content="Both addresses were updated."),
+    ])
+
+    async def run():
+        message = {"kind": "message", "text": f"My email is {email}. Copy the shipping address from my luggage order "
+                   "to the order still going to my old house and set it as my account default. "
+                   "Change my pending tablet to the cheapest available version."}
+        first = await agent.run_turn("three-writes", message, config)
+        assert first["request"]["name"] == "modify_pending_order_items"
+
+        async def confirm(proposal):
+            return await agent.run_turn("three-writes", {"kind": "confirmation", "accepted": True,
+                                                         "proposal_id": proposal["request"]["proposal_id"]}, config)
+
+        shipping = await confirm(first)
+        assert shipping["request"]["name"] == "modify_pending_order_address"
+        assert shipping["usage"]["tool_attempts"][-2]["code"] == "INVALID_ARGUMENT"
+        assert agent.environment.get_order("three-writes", order_id)["address"] != address
+        profile = await confirm(shipping)
+        assert profile["request"]["name"] == "modify_user_address"
+        assert agent.environment.load_session("three-writes")["business"]["users"][user_id]["address"] != address
+        final = await confirm(profile)
+        assert final["status"] == "answered"
+        assert agent.environment.get_order("three-writes", order_id)["address"] == address
+        assert agent.environment.load_session("three-writes")["business"]["users"][user_id]["address"] == address
+        assert len({p["request"]["proposal_id"] for p in (first, shipping, profile)}) == 3
+
+    asyncio.run(run())
+    assert not model.responses
+
+
+def test_item_lookup_promise_after_authentication_gets_one_read_retry(tmp_path):
+    email, user_id = "aarav.santos8320@example.com", "aarav_santos_2259"
+    agent, _, config = runtime(tmp_path, [
+        call("find_user_id_by_email", {"email": email}, "identity"),
+        AIMessage(content="I will now retrieve your order history to locate the laptop. Please wait while I search."),
+        call("get_user_details", {"user_id": user_id}, "profile"),
+        AIMessage(content="Your laptop is in a pending order."),
+    ])
+    result = asyncio.run(agent.run_turn("read-retry", {"kind": "message", "text":
+        f"My email is {email}. Modify the 17-inch laptop to 13-inch."}, config))
+    assert [row["name"] for row in result["usage"]["tool_attempts"]] == [
+        "find_user_id_by_email", "get_user_details",
+    ]
+    assert result["status"] == "answered"
