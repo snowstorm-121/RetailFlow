@@ -84,7 +84,7 @@ def preserved_variant_conflicts(customer_text, business, user_id, args):
 
 def false_cancellation_claim(text, business, user_id, committed_orders=(), *, unresolved_cancellation=False):
     start = r"^[\s>*`_#-]*(?:\d+\.\s*)?(?:[*`_]+\s*)?"
-    order_ref = r"(?:order\s+)?(#W\d+)[*`_]*(?:\s*\([^\n()]{1,80}\))?[*`_]*\s+(?:[—–-]\s+)?"
+    order_ref = r"(?:(?:your\s+)?order\s+)?(#W\d+)[*`_]*(?:\s*\([^\n()]{1,80}\))?[*`_]*\s+(?:[—–-]\s+)?"
     cancel = r"(?:successfully\s+)?cancel(?:l)?ed\b"
     completion = r"(?:initiated|confirmed|completed|processed)\b"
     for sentence in re.split(r"(?<=[.!?])\s+|\n|;\s*|,\s+and\s+", text, flags=re.I):

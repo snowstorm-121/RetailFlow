@@ -100,6 +100,10 @@ def test_cancellation_claim_distinguishes_operation_from_historical_status():
     }}
     assert not false_cancellation_claim("You asked whether order #W1 was canceled. It is pending.", business, "owner")
     assert not false_cancellation_claim("I did not get #W1 canceled.", business, "owner")
+    assert false_cancellation_claim(
+        "As a fallback, I have canceled the entire order. Your order #W1 has been canceled.",
+        business, "owner",
+    )
     assert false_cancellation_claim("Order #W1 has now been canceled.", business, "owner")
     assert false_cancellation_claim("- **Order #W1** (jacket) — canceled by mistake.", business, "owner")
     assert false_cancellation_claim("I have canceled order #W1.", business, "owner")
