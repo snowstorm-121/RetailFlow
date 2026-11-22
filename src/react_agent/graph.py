@@ -175,6 +175,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
     metrics.setdefault("receipt_reviews", 0)
     proposal_repair_active = False
     continuation_checked = False
+    account_copy_retry_draft_id = None
     focused_step = None
 
     def persist(state, messages):
@@ -203,7 +204,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         return address_copy_target(opening, session["business"], session["user_id"])
 
     async def retail_model(state: RetailState, runtime: Runtime[Context]):
-        nonlocal proposal_repair_active, continuation_checked, focused_step
+        nonlocal proposal_repair_active, continuation_checked, account_copy_retry_draft_id, focused_step
         focused_step = None
         if state["model_calls"] >= max_model_calls:
             return {"status": "budget_exceeded", "failure_reason": "model_call_budget"}
@@ -494,6 +495,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                     and not _requests_information(response.content) and not _is_text_tool_action(response.content)):
                 continuation_checked = True
                 metrics["focused_prose_repairs"] = 1
+                if remaining_copy_step and remaining_copy_step["tool"] == "modify_user_address":
+                    account_copy_retry_draft_id = response.id
                 feedback = SystemMessage(
                     content="The preceding draft did not use a native tool. Work only on the next explicit step. "
                             "Use a native call to read, request missing details, or propose the eligible write. "
@@ -535,8 +538,9 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                     "information" if _requests_information(text) else "proposal" if proposal_missing else None)
             receipts = [json.loads(message.content.removeprefix("Application outcome: ")) for message in outcomes
                         if message.additional_kwargs.get("committed_tool")]
-            if (kind in {None, "proposal"} and repair == "focused_prose" and goal_state is None and remaining_copy_step
-                    and remaining_copy_step["tool"] == "modify_user_address"
+            if (kind in {None, "proposal"} and account_copy_retry_draft_id
+                    and (repair == "focused_prose" or copy_read) and goal_state is None
+                    and remaining_copy_step and remaining_copy_step["tool"] == "modify_user_address"
                     and destination["address"] == copy["address"]
                     and any(receipt["name"] == "modify_pending_order_address"
                             and receipt["order_id"] == copy["destination_order_id"]
@@ -557,7 +561,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                                 "Separate confirmation is required.",
                         additional_kwargs={
                             "application_proposal": True,
-                            "superseded_draft_ids": [state["messages"][-2].id, response.id],
+                            "superseded_draft_ids": [account_copy_retry_draft_id, response.id],
                         },
                     )
                     persist(state, [response, marker])

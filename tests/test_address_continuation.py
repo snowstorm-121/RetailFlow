@@ -237,9 +237,13 @@ def test_default_address_receipt_survives_invalid_repeat_and_reports_verified_or
     assert result["usage"]["tool_attempts"][-1]["code"] == "INVALID_ARGUMENT"
 
 
-@pytest.mark.parametrize("retry_text", [None, "Both addresses are now updated.",
-                                        "Please confirm if you want me to update the account default address."])
-def test_copy_reply_stages_a_separate_default_proposal_after_shipping(tmp_path, retry_text):
+@pytest.mark.parametrize(("retry_text", "reads_during_retry"), [
+    (None, False),
+    ("Both addresses are now updated.", False),
+    ("Please confirm if you want me to update the account default address.", False),
+    ("Both addresses are now updated.", True),
+])
+def test_copy_reply_stages_a_separate_default_proposal_after_shipping(tmp_path, retry_text, reads_during_retry):
     email, user_id = "sophia.martin4832@example.com", "sophia_martin_8570"
     order_id = "#W1603792"
     address = {"address1": "592 Elm Avenue", "address2": "Suite 978", "city": "Houston",
@@ -250,6 +254,7 @@ def test_copy_reply_stages_a_separate_default_proposal_after_shipping(tmp_path, 
         call("modify_pending_order_address", {"order_id": order_id, **address}, "shipping"),
         call("get_order_details", {"order_id": order_id}, "read"),
         AIMessage(content="Both the shipping address and default address were updated."),
+        *([call("get_order_details", {"order_id": order_id}, "retry-read")] if reads_during_retry else []),
         (AIMessage(content=retry_text) if retry_text is not None
          else call("modify_user_address", {"user_id": user_id, **address}, "account")),
         AIMessage(content="The shipping and account addresses have both been committed."),
