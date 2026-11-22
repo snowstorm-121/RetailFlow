@@ -237,40 +237,53 @@ def test_default_address_receipt_survives_invalid_repeat_and_reports_verified_or
     assert result["usage"]["tool_attempts"][-1]["code"] == "INVALID_ARGUMENT"
 
 
-@pytest.mark.parametrize("creates_proposal", [False, True])
-def test_copy_reply_recovers_after_read_and_keeps_unconfirmed_default_out_of_completion(tmp_path, creates_proposal):
+@pytest.mark.parametrize("retry_text", [None, "Both addresses are now updated.",
+                                        "Please confirm if you want me to update the account default address."])
+def test_copy_reply_stages_a_separate_default_proposal_after_shipping(tmp_path, retry_text):
     email, user_id = "sophia.martin4832@example.com", "sophia_martin_8570"
     order_id = "#W1603792"
     address = {"address1": "592 Elm Avenue", "address2": "Suite 978", "city": "Houston",
                "state": "TX", "country": "USA", "zip": "77242"}
-    agent, _, config = runtime(tmp_path, [
+    agent, model, config = runtime(tmp_path, [
         call("find_user_id_by_email", {"email": email}, "identity"),
         call("get_user_details", {"user_id": user_id}, "profile"),
         call("modify_pending_order_address", {"order_id": order_id, **address}, "shipping"),
         call("get_order_details", {"order_id": order_id}, "read"),
         AIMessage(content="Both the shipping address and default address were updated."),
-        (call("modify_user_address", {"user_id": user_id, **address}, "account") if creates_proposal
-         else AIMessage(content="Both addresses are now updated.")),
+        (AIMessage(content=retry_text) if retry_text is not None
+         else call("modify_user_address", {"user_id": user_id, **address}, "account")),
+        AIMessage(content="The shipping and account addresses have both been committed."),
+        AIMessage(content="The shipping and account addresses have both been committed."),
     ])
 
     async def run():
         first = await agent.run_turn("copy-receipt", {"kind": "message", "text":
             f"My email is {email}. Copy the shipping address from my luggage order to the order still going to "
             "my old house and set it as my account default."}, config)
-        return await agent.run_turn("copy-receipt", {"kind": "confirmation", "accepted": True,
-                                                    "proposal_id": first["request"]["proposal_id"]}, config)
-
-    result = asyncio.run(run())
-    assert result["usage"]["focused_prose_repairs"] == 1
-    if creates_proposal:
+        result = await agent.run_turn("copy-receipt", {"kind": "confirmation", "accepted": True,
+                                                      "proposal_id": first["request"]["proposal_id"]}, config)
+        assert result["usage"]["focused_prose_repairs"] == 1
         assert result["status"] == "needs_confirmation"
-        assert result["request"]["name"] == "modify_user_address"
-    else:
-        assert result["status"] == "answered"
-        assert "Shipping address updated" in result["text"]
-        assert "Account default address change has no confirmed update" in result["text"]
-    assert agent.environment.load_session("copy-receipt")["business"]["users"][user_id]["address"] != address
+        second = result["request"]
+        assert second["name"] == "modify_user_address"
+        assert second["args"] == {"user_id": user_id, **address}
+        assert second["proposal_id"] != first["request"]["proposal_id"]
+        assert result["usage"]["tool_attempts"][-1].get("origin") == (None if retry_text is None else "application")
+        assert agent.environment.load_session("copy-receipt")["business"]["users"][user_id]["address"] != address
+        assert agent.environment.receipt_for_proposal("copy-receipt", second["proposal_id"]) is None
 
+        final = await agent.run_turn("copy-receipt", {"kind": "confirmation", "accepted": True,
+                                                     "proposal_id": second["proposal_id"]}, config)
+        assert final["status"] == "answered"
+        if retry_text is not None:
+            context = [message.content for message in model.inputs[-1]]
+            assert retry_text not in context
+            assert "Both the shipping address and default address were updated." not in context
+            assert any("Application staged account address proposal" in message for message in context)
+        assert "Account default address updated" in final["text"]
+        assert agent.environment.load_session("copy-receipt")["business"]["users"][user_id]["address"] == address
+
+    asyncio.run(run())
 
 
 def test_address_receipt_does_not_substitute_an_unrelated_order():
@@ -299,3 +312,22 @@ def test_address_receipt_renderer_abstains_without_an_independent_source():
         [{"order_id": "#W1", "user_id": "owner", "address": address}],
         "owner",
     ) is None
+
+
+def test_proposal_only_address_call_does_not_execute_an_existing_confirmation(tmp_path):
+    email, user_id = "sophia.martin4832@example.com", "sophia_martin_8570"
+    args = {"user_id": user_id, "address1": "592 Elm Avenue", "address2": "Suite 978", "city": "Houston",
+            "state": "TX", "country": "USA", "zip": "77242"}
+    agent, _, config = runtime(tmp_path, [])
+    environment = agent.environment
+    environment.create_session("staging", config["initial_state_ref"])
+    environment.dispatch_tool("staging", "find_user_id_by_email", {"email": email})
+    staged = environment.dispatch_tool("staging", "modify_user_address", args)["proposal"]
+    assert environment.confirm_action("staging", staged["proposal_id"], True)["ok"]
+    before = environment.state_hash("staging")
+
+    result = environment.stage_account_address("staging", args)
+    assert result["code"] == "PROPOSAL_ALREADY_PENDING"
+    assert environment.pending_proposal("staging")["proposal_id"] == staged["proposal_id"]
+    assert environment.state_hash("staging") == before
+    assert environment.receipt_for_proposal("staging", staged["proposal_id"]) is None

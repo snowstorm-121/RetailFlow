@@ -533,6 +533,36 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 text, re.I))
             kind = ("empty" if not text else "proposal" if proposal_missing and explicit_confirmation else
                     "information" if _requests_information(text) else "proposal" if proposal_missing else None)
+            receipts = [json.loads(message.content.removeprefix("Application outcome: ")) for message in outcomes
+                        if message.additional_kwargs.get("committed_tool")]
+            if (kind in {None, "proposal"} and repair == "focused_prose" and goal_state is None and remaining_copy_step
+                    and remaining_copy_step["tool"] == "modify_user_address"
+                    and destination["address"] == copy["address"]
+                    and any(receipt["name"] == "modify_pending_order_address"
+                            and receipt["order_id"] == copy["destination_order_id"]
+                            and receipt.get("user_id") == session["user_id"]
+                            and receipt.get("updated_address") == copy["address"] for receipt in receipts)):
+                args = {"user_id": session["user_id"], **copy["address"]}
+                start = time.perf_counter()
+                staged = environment.stage_account_address(thread_id, args)
+                metrics["tool_seconds"] += time.perf_counter() - start
+                metrics["tool_calls"] += 1
+                metrics["tool_attempts"].append({"name": "modify_user_address", "args": args,
+                                                 "code": staged["code"], "message": staged.get("message"),
+                                                 "attempt": 1, "origin": "application"})
+                if staged["code"] == "CONFIRMATION_REQUIRED":
+                    proposal = staged["proposal"]
+                    marker = SystemMessage(
+                        content=f"Application staged account address proposal {proposal['proposal_id']}. "
+                                "Separate confirmation is required.",
+                        additional_kwargs={
+                            "application_proposal": True,
+                            "superseded_draft_ids": [state["messages"][-2].id, response.id],
+                        },
+                    )
+                    persist(state, [response, marker])
+                    return {"messages": [response, marker], "model_calls": state["model_calls"] + 1,
+                            "status": "needs_confirmation", "request": proposal}
             if kind:
                 reason = {"empty": "empty_model_response", "proposal": "proposal_not_created",
                           "information": "information_request_not_structured"}[kind]
@@ -588,9 +618,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                                             unresolved_cancellation=bool(cancel_requested and outcomes and not cancelled_orders)):
                     return {"messages": [response], "model_calls": state["model_calls"] + 1,
                             "status": "failed", "failure_reason": "unverified_cancellation_claim"}
-            if outcomes and session.get("user_id"):
-                receipts = [json.loads(message.content.removeprefix("Application outcome: ")) for message in outcomes
-                            if message.additional_kwargs.get("committed_tool")]
+            if receipts and session.get("user_id"):
                 order_reads = []
                 source_order_id = None
                 if not copy and any(receipt["name"] == "modify_user_address" for receipt in receipts):

@@ -129,7 +129,14 @@ class RetailEnvironment:
             db.execute("UPDATE sessions SET pending_json = ? WHERE thread = ?", (_json(pending), thread_id))
             return {"ok": True, "code": "CONFIRMED"}
 
+    def stage_account_address(self, thread_id: str, args: dict) -> dict:
+        """Preview and stage an account address change without executing a pending write."""
+        return self._dispatch_tool(thread_id, "modify_user_address", args, proposal_only=True)
+
     def dispatch_tool(self, thread_id: str, name: str, args: dict) -> dict:
+        return self._dispatch_tool(thread_id, name, args)
+
+    def _dispatch_tool(self, thread_id: str, name: str, args: dict, *, proposal_only=False) -> dict:
         if name not in SCHEMAS:
             return _result("UNKNOWN_TOOL", "This tool is outside the fixed retail scope.")
         if not valid_arguments(name, args):
@@ -143,6 +150,8 @@ class RetailEnvironment:
             if pending and time.time() - pending["created_at"] > PROPOSAL_TTL_SECONDS:
                 sql.execute("UPDATE sessions SET pending_json = NULL WHERE thread = ?", (thread_id,))
                 pending = None
+            if proposal_only and pending:
+                return _result("PROPOSAL_ALREADY_PENDING", "Resolve the current proposal before creating another.")
             changed_target = "order_id" in args and pending and args["order_id"] != pending["args"].get("order_id")
             changed_profile = name == "get_user_details" and args["user_id"] != user_id
             changed_write = name in WRITE_TOOLS and pending and (pending["name"] != name or pending["args"] != args)

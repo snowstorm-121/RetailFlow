@@ -42,6 +42,8 @@ def _tool_view(message):
 
 def _blocks(messages, structured=True):
     blocks = []
+    superseded = {draft_id for message in messages if message.additional_kwargs.get("application_proposal")
+                  for draft_id in message.additional_kwargs.get("superseded_draft_ids", ()) if draft_id}
     index = 0
     while index < len(messages):
         message = messages[index]
@@ -49,7 +51,11 @@ def _blocks(messages, structured=True):
                 and index != len(messages) - 1):
             index += 1
             continue
-        if (isinstance(message, SystemMessage) and not (message.additional_kwargs.get("application_result") or message.additional_kwargs.get("protocol_feedback"))) or isinstance(message, ToolMessage):
+        if message.id in superseded or isinstance(message, ToolMessage):
+            index += 1
+            continue
+        if isinstance(message, SystemMessage) and not any(message.additional_kwargs.get(key)
+                for key in ("application_result", "application_proposal", "protocol_feedback")):
             index += 1
             continue
         if isinstance(message, AIMessage) and message.tool_calls:
