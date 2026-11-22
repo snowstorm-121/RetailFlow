@@ -207,3 +207,95 @@ def test_confirmed_item_change_corrects_real_charge_wording(tmp_path, label):
         assert "No real payment was sent" in result["text"]
         assert result["usage"]["original_model_answer"] == draft
     asyncio.run(run())
+
+
+def test_default_address_receipt_survives_invalid_repeat_and_reports_verified_order(tmp_path):
+    address = {"address1": "943 Maple Drive", "address2": "Suite 356", "city": "Chicago",
+               "state": "IL", "country": "USA", "zip": "60621"}
+    args = {"user_id": "lucas_santos_6600", **address}
+    agent, _, config = runtime(tmp_path, [
+        call("find_user_id_by_name_zip", {"first_name": "Lucas", "last_name": "Santos", "zip": "80239"}, "identity"),
+        call("get_order_details", {"order_id": "#W7895761"}, "source"),
+        call("modify_user_address", args, "default"),
+        call("modify_user_address", {key: value for key, value in args.items() if key != "country"}, "invalid-repeat"),
+        AIMessage(content="I'm unable to update your account default address due to a schema mismatch."),
+    ])
+
+    async def run():
+        first = await agent.run_turn("receipt", {"kind": "message", "text":
+            "I'm Lucas Santos ZIP 80239. Tell me the shipping address, tracking number and whether the order for "
+            "my daughter in Chicago is still in transit. Also check the tablet storage in that order. "
+            "Set my account default to my daughter's shipping address from the order."}, config)
+        return await agent.run_turn("receipt", {"kind": "confirmation", "accepted": True,
+                                               "proposal_id": first["request"]["proposal_id"]}, config)
+
+    result = asyncio.run(run())
+    assert result["status"] == "answered"
+    for fact in ("Account default address updated", "943 Maple Drive", "840887978435", "delivered", "64GB"):
+        assert fact in result["text"]
+    assert "unable" not in result["text"]
+    assert result["usage"]["tool_attempts"][-1]["code"] == "INVALID_ARGUMENT"
+
+
+@pytest.mark.parametrize("creates_proposal", [False, True])
+def test_copy_reply_recovers_after_read_and_keeps_unconfirmed_default_out_of_completion(tmp_path, creates_proposal):
+    email, user_id = "sophia.martin4832@example.com", "sophia_martin_8570"
+    order_id = "#W1603792"
+    address = {"address1": "592 Elm Avenue", "address2": "Suite 978", "city": "Houston",
+               "state": "TX", "country": "USA", "zip": "77242"}
+    agent, _, config = runtime(tmp_path, [
+        call("find_user_id_by_email", {"email": email}, "identity"),
+        call("get_user_details", {"user_id": user_id}, "profile"),
+        call("modify_pending_order_address", {"order_id": order_id, **address}, "shipping"),
+        call("get_order_details", {"order_id": order_id}, "read"),
+        AIMessage(content="Both the shipping address and default address were updated."),
+        (call("modify_user_address", {"user_id": user_id, **address}, "account") if creates_proposal
+         else AIMessage(content="Both addresses are now updated.")),
+    ])
+
+    async def run():
+        first = await agent.run_turn("copy-receipt", {"kind": "message", "text":
+            f"My email is {email}. Copy the shipping address from my luggage order to the order still going to "
+            "my old house and set it as my account default."}, config)
+        return await agent.run_turn("copy-receipt", {"kind": "confirmation", "accepted": True,
+                                                    "proposal_id": first["request"]["proposal_id"]}, config)
+
+    result = asyncio.run(run())
+    assert result["usage"]["focused_prose_repairs"] == 1
+    if creates_proposal:
+        assert result["status"] == "needs_confirmation"
+        assert result["request"]["name"] == "modify_user_address"
+    else:
+        assert result["status"] == "answered"
+        assert "Shipping address updated" in result["text"]
+        assert "Account default address change has no confirmed update" in result["text"]
+    assert agent.environment.load_session("copy-receipt")["business"]["users"][user_id]["address"] != address
+
+
+
+def test_address_receipt_does_not_substitute_an_unrelated_order():
+    from retailflow.address_followups import verified_address_reply
+
+    address = {"address1": "100 Main Street"}
+    text = verified_address_reply(
+        "Tell me the shipping address and tracking for #W1. Set my account default to its shipping address.",
+        [{"name": "modify_user_address", "user_id": "owner", "updated_address": address}],
+        [{"order_id": "#W2", "user_id": "owner", "address": address}],
+        "owner", source_order_id="#W1",
+    )
+    assert "Account default address updated" in text
+    assert "could not be verified" in text
+    assert "#W2" not in text
+
+
+
+def test_address_receipt_renderer_abstains_without_an_independent_source():
+    from retailflow.address_followups import verified_address_reply
+
+    address = {"address1": "100 Main Street"}
+    assert verified_address_reply(
+        "Tell me the shipping address and tracking for #W1, not #W2. Set my account default to its shipping address.",
+        [{"name": "modify_user_address", "user_id": "owner", "updated_address": address}],
+        [{"order_id": "#W1", "user_id": "owner", "address": address}],
+        "owner",
+    ) is None

@@ -165,7 +165,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
     from retailflow.preproposal import (address_copy_target, address_order_candidates, false_cancellation_claim,
                                         item_change_targets, item_order_excluded, preserved_variant_conflicts,
                                         requested_variants, wrong_item_target)
-    from retailflow.address_followups import advisory_opening, explicit_address_steps, matching_variants, processing_guarantee_fact
+    from retailflow.address_followups import (advisory_opening, explicit_address_steps, matching_variants,
+                                              processing_guarantee_fact, verified_address_reply)
     from retailflow.cancel_goals import GOAL_TOOL, GOAL_PROMPT, validate_goal, goal_progress
     from retailflow.cancel_goals import GOAL_REFERENCE_TOOL, GOAL_REFERENCE_PROMPT, goal_reference_input, resolve_goal_references
 
@@ -236,6 +237,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         opening = request_text(active_messages)
         copy = address_copy_evidence(active_messages, opening, session)
         address_request = address_request or copy is not None
+        remaining_copy_step = None
         if copy:
             destination = session["business"]["orders"][copy["destination_order_id"]]
             account = session["business"]["users"][session["user_id"]]
@@ -248,14 +250,17 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             retry_focus = state["model_calls"] == 1 and (
                 state["messages"][-1].additional_kwargs.get("focused_write_mismatch")
                 or state["messages"][-1].additional_kwargs.get("protocol_feedback") == "focused_prose")
-            if config.get("confirmed_this_turn") and outcomes and (state["model_calls"] == 0 or retry_focus):
+            if config.get("confirmed_this_turn") and outcomes:
                 if (destination["address"] != copy["address"] and destination["status"] in
                         {"pending", "pending (item modified)"}):
-                    focused_step = {"tool": "modify_pending_order_address", "order_id": copy["destination_order_id"],
-                                    **copy["address"]}
+                    remaining_copy_step = {"tool": "modify_pending_order_address",
+                                           "order_id": copy["destination_order_id"], **copy["address"]}
                 elif copy["update_default"] and account["address"] != copy["address"]:
-                    focused_step = {"tool": "modify_user_address", "user_id": session["user_id"], **copy["address"]}
-                if focused_step:
+                    remaining_copy_step = {"tool": "modify_user_address", "user_id": session["user_id"],
+                                           **copy["address"]}
+                if remaining_copy_step and (state["model_calls"] == 0 or retry_focus
+                                            or state["messages"][-1].additional_kwargs.get("protocol_feedback") == "focused_prose"):
+                    focused_step = remaining_copy_step
                     prompt += ("\nThe confirmed action is complete. Propose this remaining address change separately: "
                                + json.dumps(focused_step, ensure_ascii=False))
         steps = explicit_address_steps(opening) if address_request else []
@@ -478,7 +483,15 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             return {"messages": [response], "model_calls": state["model_calls"] + 1, "status": "answered"}
         if not response.tool_calls:
             review_budget = min(max_model_calls, config.get("episode_calls_remaining", max_model_calls))
-            if focused_step and state["model_calls"] == 0 and state["model_calls"] + 1 < review_budget:
+            copy_read = bool(remaining_copy_step and isinstance(latest, ToolMessage)
+                             and latest.name in {"get_order_details", "get_user_details"}
+                             and latest.status == "success")
+            if copy_read and latest.name == "get_order_details":
+                read_order = json.loads(latest.content)["data"]["order_id"]
+                copy_read = read_order in {copy["source_order_id"], copy["destination_order_id"]}
+            if ((copy_read or (focused_step and state["model_calls"] == 0))
+                    and not continuation_checked and state["model_calls"] + 1 < review_budget
+                    and not _requests_information(response.content) and not _is_text_tool_action(response.content)):
                 continuation_checked = True
                 metrics["focused_prose_repairs"] = 1
                 feedback = SystemMessage(
@@ -575,6 +588,30 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                                             unresolved_cancellation=bool(cancel_requested and outcomes and not cancelled_orders)):
                     return {"messages": [response], "model_calls": state["model_calls"] + 1,
                             "status": "failed", "failure_reason": "unverified_cancellation_claim"}
+            if outcomes and session.get("user_id"):
+                receipts = [json.loads(message.content.removeprefix("Application outcome: ")) for message in outcomes
+                            if message.additional_kwargs.get("committed_tool")]
+                order_reads = []
+                source_order_id = None
+                if not copy and any(receipt["name"] == "modify_user_address" for receipt in receipts):
+                    for message in active_messages:
+                        if isinstance(message, ToolMessage) and message.name == "get_order_details":
+                            read = json.loads(message.content)
+                            if read.get("ok"):
+                                order_reads.append(read["data"])
+                    references = set(re.findall(r"#W\d+", opening.upper()))
+                    if not references and re.search(r"\baddress\b", opening, re.I):
+                        owned = session["business"]["users"][session["user_id"]]["orders"]
+                        candidates = address_order_candidates(opening, session["business"], session["user_id"], owned)
+                        references = {row["order_id"] for row in candidates}
+                    if len(references) == 1:
+                        source_order_id = references.pop()
+                grounded = verified_address_reply(opening, receipts, order_reads, session["user_id"], copy, source_order_id)
+                if grounded is not None:
+                    metrics["original_model_answer"] = response.content
+                    metrics["application_rendered_receipt"] = True
+                    reply = AIMessage(content=grounded, additional_kwargs={"application_rendered_receipt": True})
+                    return {"messages": [response, reply], "model_calls": state["model_calls"] + 1, "status": "answered"}
         if (not response.tool_calls and config.get("receipt_answer_review", False)
                 and not metrics["receipt_reviews"] and session.get("target_order_status") == "return requested"
                 and any(m.additional_kwargs.get("application_result") for m in state["messages"])):

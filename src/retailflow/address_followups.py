@@ -77,3 +77,69 @@ def matching_variants(variants, preferences):
             for item_id, variant in variants.items()
             if variant["available"] is True and all(variant["options"].get(key) in values
                                                      for key, values in requested.items())][:8]
+
+
+def verified_address_reply(opening, receipts, orders, user_id, copy=None, source_order_id=None):
+    """Render supported address outcomes from active-request receipts and verified reads."""
+    if not opening or re.search(r"\b(?:cancel|return|exchange|transfer)\b", opening, re.I):
+        return None
+
+    def format_address(address):
+        return ", ".join(address[key] for key in ("address1", "address2", "city", "state", "zip", "country")
+                         if address.get(key))
+
+    account = next((receipt for receipt in reversed(receipts)
+                    if receipt["name"] == "modify_user_address" and receipt.get("user_id") == user_id), None)
+    if copy:
+        if re.search(r"\b(?:tell|check|show|tracking|how|what|whether)\b", opening, re.I):
+            return None
+        destination = copy["destination_order_id"]
+        lines = []
+        for receipt in receipts:
+            if receipt["name"] == "modify_pending_order_items":
+                lines.append(f"Item change confirmed for order {receipt['order_id']}.")
+                payment = receipt.get("modification_details", {}).get("simulated_payment")
+                if payment:
+                    lines.append(f"Local {payment['transaction_type']} recorded: ${payment['amount']:.2f}. "
+                                 "No real payment was sent.")
+        if (not lines and re.search(r"(?:^|[.!?]\s+)(?:please )?(?:change|modify|switch) ", opening, re.I)):
+            lines.append("No item change was confirmed in this request.")
+        shipping = next((receipt for receipt in reversed(receipts)
+                         if receipt["name"] == "modify_pending_order_address"
+                         and receipt["order_id"] == destination and receipt.get("updated_address") == copy["address"]), None)
+        if shipping:
+            lines.append(f"Shipping address updated for order {destination}: {format_address(shipping['updated_address'])}.")
+        else:
+            lines.append(f"Shipping address change for order {destination} has no confirmed update in this request.")
+        if copy["update_default"]:
+            if account and account.get("updated_address") == copy["address"]:
+                lines.append(f"Account default address updated: {format_address(account['updated_address'])}.")
+            else:
+                lines.append("Account default address change has no confirmed update in this request.")
+        return "\n".join(lines)
+
+    if (not account or not source_order_id or not re.search(r"\baccount default\b", opening, re.I)
+            or not re.search(r"\bshipping address\b", opening, re.I)
+            or not re.search(r"\b(?:tracking|in transit|delivery status)\b", opening, re.I)):
+        return None
+    address = format_address(account["updated_address"])
+    lines = [f"Account default address updated: {address}."]
+    order = next((order for order in reversed(orders)
+                  if order["order_id"] == source_order_id and order["user_id"] == user_id), None)
+    if not order:
+        lines.append("The requested order details could not be verified.")
+        return "\n".join(lines)
+    lines.extend([f"Order {source_order_id} shipping address: {format_address(order['address'])}.",
+                  f"Order status: {order['status']}."])
+    if order["address"] != account["updated_address"]:
+        lines.append("The updated account default differs from this order's shipping address.")
+    tracking = [tracking_id for shipment in order["fulfillments"] for tracking_id in shipment["tracking_id"]]
+    if tracking:
+        lines.append("Tracking number: " + ", ".join(tracking) + ".")
+    for item in order["items"]:
+        if re.search(r"\b" + re.escape(item["name"]) + r"\b", opening, re.I):
+            options = {key: value for key, value in item["options"].items()
+                       if re.search(r"\b" + re.escape(key) + r"\b", opening, re.I)}
+            if options:
+                lines.append(item["name"] + " " + ", ".join(f"{key}: {value}" for key, value in options.items()) + ".")
+    return "\n".join(lines)
