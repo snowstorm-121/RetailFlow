@@ -509,19 +509,6 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 return {"messages": [response], "model_calls": state["model_calls"] + 1,
                         "status": "failed", "failure_reason": "information_request_not_structured"}
             text = response.content
-            if (item_targets and isinstance(text, str) and isinstance(latest, ToolMessage)
-                    and latest.name in IDENTITY_TOOLS and latest.status == "success"
-                    and metrics["dialogue_repairs"] == 0 and state["model_calls"] + 1 < review_budget
-                    and re.search(r"\b(?:I will (?:now )?(?:retrieve|check|search|look up)|please wait while I (?:search|check))\b",
-                                  text, re.I)):
-                metrics["dialogue_repairs"] += 1
-                feedback = SystemMessage(
-                    content=f"Authentication succeeded. Call get_user_details for {session['user_id']} "
-                            "to look up the orders now. Do not tell the customer to wait.",
-                    additional_kwargs={"protocol_feedback": "read_pending_orders"},
-                )
-                persist(state, [response, feedback])
-                return {"messages": [response, feedback], "model_calls": state["model_calls"] + 1, "status": "repairing"}
             address_confirmation = (isinstance(text, str) and re.search(r"\b(?:address|suite|shipping)\b", text, re.I)
                                     and re.search(r"\b(?:change|chang(?:ing|ed)|updat\w*|modify|proceed)\b", text, re.I))
             proposal_missing = (isinstance(text, str) and session.get("user_id")
@@ -551,6 +538,19 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                              "or give an accurate nonempty final answer. Do not invent customer details.",
                 }[kind]
                 feedback = SystemMessage(content=feedback_text, additional_kwargs={"protocol_feedback": kind})
+                persist(state, [response, feedback])
+                return {"messages": [response, feedback], "model_calls": state["model_calls"] + 1, "status": "repairing"}
+            if (item_targets and isinstance(text, str) and isinstance(latest, ToolMessage)
+                    and latest.name in IDENTITY_TOOLS and latest.status == "success"
+                    and not metrics.get("authenticated_lookup_retries") and state["model_calls"] + 1 < review_budget
+                    and re.search(r"\b(?:I will (?:now )?(?:retrieve|check|search|look up)|please wait while I (?:search|check))\b",
+                                  text, re.I)):
+                metrics["authenticated_lookup_retries"] = 1
+                feedback = SystemMessage(
+                    content=f"Authentication succeeded. Call get_user_details for {session['user_id']} "
+                            "to look up the orders now. Do not tell the customer to wait.",
+                    additional_kwargs={"protocol_feedback": "read_pending_orders"},
+                )
                 persist(state, [response, feedback])
                 return {"messages": [response, feedback], "model_calls": state["model_calls"] + 1, "status": "repairing"}
             if (address_request and outcomes and config.get("confirmed_this_turn")

@@ -360,3 +360,18 @@ def test_item_lookup_promise_after_authentication_gets_one_read_retry(tmp_path):
         "find_user_id_by_email", "get_user_details",
     ]
     assert result["status"] == "answered"
+
+
+def test_read_retry_does_not_consume_the_structured_clarification_retry(tmp_path):
+    email, user_id = "aarav.santos8320@example.com", "aarav_santos_2259"
+    agent, _, config = runtime(tmp_path, [
+        call("find_user_id_by_email", {"email": email}, "identity"),
+        AIMessage(content="I will now retrieve your order history to locate the laptop."),
+        call("get_user_details", {"user_id": user_id}, "profile"),
+        AIMessage(content="Please provide your preferred payment method."),
+        call("ask_user", {"fields": ["payment_method"], "question": "What payment method should I use?"}, "clarify"),
+    ])
+    result = asyncio.run(agent.run_turn("read-then-clarify", {"kind": "message", "text":
+        f"My email is {email}. Modify the 17-inch laptop to 13-inch."}, config))
+    assert result["status"] == "needs_input"
+    assert result["request"]["fields"] == ["payment_method"]
