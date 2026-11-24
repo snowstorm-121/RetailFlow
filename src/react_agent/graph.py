@@ -408,6 +408,10 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                        "use ask_user. For an address update, read the authorized order or profile if needed and call the appropriate "
                        "address tool with all fields. For a partial change, retain every unchanged address field. Use an empty address2 only if the destination has no second line. Never replay a completed write. "
                        "Do not output a simulated tool result or claim completion.")
+            if latest.additional_kwargs.get("return_confirmation_in_prose"):
+                prompt += (" Handle the independently requested return first if its order, item selection and refund "
+                           "method are verified. Honor dependencies stated anywhere in the customer request. "
+                           "If the return itself needs clarification, use ask_user.")
             examples = []
             payload = {"events": events}
             if progress is not None:
@@ -534,7 +538,26 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             explicit_confirmation = (isinstance(text, str) and re.search(
                 r"please confirm (?:if|whether) you (?:would like|want|wish)|would you like (?:me )?to (?:proceed|cancel|return|exchange|modify)|do you want me to",
                 text, re.I))
-            kind = ("empty" if not text else "proposal" if proposal_missing and explicit_confirmation else
+            return_clause = re.search(r"(?:^|[.!?]\s+)(?:please )?return\s+([^.!?\n]+)", opening, re.I)
+            return_order_ids = set(re.findall(r"#W\d+", return_clause[1].upper())) if return_clause else set()
+            return_confirmation = bool(
+                isinstance(text, str) and session.get("user_id") and return_clause and len(return_order_ids) <= 1
+                and not re.search(r"\b(?:if|unless|until|before|after|provided|only when)\b", return_clause[1], re.I)
+                and not re.match(r"[.!?]\s+(?:(?:only|do (?:this|that|it) only)\b)",
+                                 opening[return_clause.end():], re.I)
+                and re.search(r"\bconfirm (?:if|whether) you (?:want|wish|would like) to "
+                              r"(?:proceed with returning|return)\b", text, re.I)
+                and any(isinstance(message, ToolMessage) and message.name == "get_order_details"
+                        and message.status == "success"
+                        and (order := json.loads(message.content)["data"])["status"] == "delivered"
+                        and order["user_id"] == session["user_id"]
+                        and session["business"]["orders"].get(order["order_id"], {}).get("status") == "delivered"
+                        and (order["order_id"] in return_order_ids if return_order_ids else
+                             any(re.search(r"\b" + re.escape(item["name"].rsplit(maxsplit=1)[-1]) + r"\b",
+                                           return_clause[1], re.I) for item in order["items"]))
+                        for message in active_messages)
+            )
+            kind = ("empty" if not text else "proposal" if return_confirmation or (proposal_missing and explicit_confirmation) else
                     "information" if _requests_information(text) else "proposal" if proposal_missing else None)
             receipts = [json.loads(message.content.removeprefix("Application outcome: ")) for message in outcomes
                         if message.additional_kwargs.get("committed_tool")]
@@ -584,7 +607,10 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                     "empty": "The previous model response was empty. Continue with a native tool call if needed, "
                              "or give an accurate nonempty final answer. Do not invent customer details.",
                 }[kind]
-                feedback = SystemMessage(content=feedback_text, additional_kwargs={"protocol_feedback": kind})
+                feedback = SystemMessage(content=feedback_text, additional_kwargs={
+                    "protocol_feedback": kind,
+                    **({"return_confirmation_in_prose": True} if return_confirmation else {}),
+                })
                 persist(state, [response, feedback])
                 return {"messages": [response, feedback], "model_calls": state["model_calls"] + 1, "status": "repairing"}
             if (item_targets and isinstance(text, str) and isinstance(latest, ToolMessage)

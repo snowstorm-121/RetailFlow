@@ -555,3 +555,65 @@ def test_proposal_recovery_survives_intermediate_read(tmp_path, native_finish):
     assert result['usage']['dialogue_repairs'] == 1
     assert result['usage']['model_calls'] == 4
     assert worker.environment.get_order('a', '#W5056519')['status'] == 'pending'
+
+
+def test_mixed_confirmation_draft_recovers_ready_return_before_laptop_choice(tmp_path):
+    email = "aarav.santos8320@example.com"
+    speaker_order, laptop_order = "#W8528674", "#W9672333"
+    args = {"order_id": speaker_order, "item_ids": ["6704763132"], "payment_method_id": "paypal_7664977"}
+    draft = ("1. **Confirm which 13-inch laptop variant you prefer**.\n"
+             "2. **Confirm if you want to proceed with returning the non-water-resistant speaker**.\n"
+             "Once you confirm both, I will generate the proposals.")
+    worker, model, config = runtime(tmp_path, [
+        call("find_user_id_by_email", {"email": email}, "identity"),
+        call("get_order_details", {"order_id": laptop_order}, "laptop"),
+        call("get_order_details", {"order_id": speaker_order}, "speaker"),
+        AIMessage(content=draft),
+        call("return_delivered_order_items", args, "return"),
+        call("ask_user", {"fields": ["exchange_options"], "question": "Which eligible laptop variant do you prefer?"}, "variant"),
+    ], isolated_proposal_repair=True)
+
+    async def run():
+        first = await worker.run_turn("mixed-return", {"kind": "message", "text":
+            f"My email is {email}. Return the more expensive speaker that is not water resistant. "
+            "Modify the 17-inch laptop in another order to 13-inch."}, config)
+        assert first["status"] == "needs_confirmation"
+        assert first["request"]["name"] == "return_delivered_order_items"
+        assert first["request"]["args"] == args
+        assert first["usage"]["dialogue_repairs"] == 1
+        assert draft not in model.inputs[-1][-1].content
+        assert "Handle the independently requested return first" in model.inputs[-1][0].content
+        assert worker.environment.get_order("mixed-return", speaker_order)["status"] == "delivered"
+        assert worker.environment.receipt_for_proposal("mixed-return", first["request"]["proposal_id"]) is None
+
+        followup = await worker.run_turn("mixed-return", {"kind": "confirmation", "accepted": True,
+                                                         "proposal_id": first["request"]["proposal_id"]}, config)
+        assert followup["status"] == "needs_input"
+        assert followup["request"]["fields"] == ["exchange_options"]
+        assert worker.environment.get_order("mixed-return", speaker_order)["status"] == "return requested"
+        assert worker.environment.get_order("mixed-return", laptop_order)["status"] == "pending"
+
+    asyncio.run(run())
+
+
+
+@pytest.mark.parametrize("request_text", [
+    "Is the speaker in #W8528674 eligible for a return?",
+    "Return the speaker in #W9672333. Check order #W8528674 too.",
+    "Return the speaker only if you can modify my laptop to 13 inches.",
+    "Return the speaker from #W9672333, not #W8528674.",
+    "Return the speaker. Only do that if you can modify my laptop.",
+    "Return the laptop. Check the speaker in #W8528674 too.",
+])
+def test_return_confirmation_repair_requires_independent_eligible_scope(tmp_path, request_text):
+    email, order_id = "aarav.santos8320@example.com", "#W8528674"
+    worker, _, config = runtime(tmp_path, [
+        call("find_user_id_by_email", {"email": email}, "identity"),
+        call("get_order_details", {"order_id": order_id}, "speaker"),
+        AIMessage(content="Confirm if you want to proceed with returning the speaker."),
+    ], isolated_proposal_repair=True)
+    result = asyncio.run(worker.run_turn("return-question", {"kind": "message", "text":
+        f"My email is {email}. {request_text}"}, config))
+    assert result["status"] == "answered"
+    assert result["usage"]["dialogue_repairs"] == 0
+    assert worker.environment.pending_proposal("return-question") is None
