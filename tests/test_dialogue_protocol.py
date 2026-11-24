@@ -617,3 +617,58 @@ def test_return_confirmation_repair_requires_independent_eligible_scope(tmp_path
     assert result["status"] == "answered"
     assert result["usage"]["dialogue_repairs"] == 0
     assert worker.environment.pending_proposal("return-question") is None
+
+
+@pytest.mark.parametrize(("recover_commit", "extra_request"), [
+    (False, ""), (True, ""), (False, " Explain why my previous refund was declined."),
+])
+def test_mixed_write_reply_uses_actual_replacement_and_both_receipts(tmp_path, recover_commit, extra_request):
+    email = "aarav.santos8320@example.com"
+    speaker_order, laptop_order = "#W8528674", "#W9672333"
+    returned = {"order_id": speaker_order, "item_ids": ["6704763132"], "payment_method_id": "paypal_7664977"}
+    modified = {"order_id": laptop_order, "item_ids": ["1684786391"], "new_item_ids": ["5052031638"],
+                "payment_method_id": "paypal_7664977"}
+    draft = "The new laptop has 32GB RAM. The difference is $101.31, charged to your PayPal account. Both are still proposals."
+    worker, _, config = runtime(tmp_path, [
+        call("find_user_id_by_email", {"email": email}, "identity"),
+        call("get_order_details", {"order_id": speaker_order}, "speaker"),
+        call("return_delivered_order_items", returned, "return"),
+        call("get_order_details", {"order_id": laptop_order}, "laptop"),
+        call("get_product_details", {"product_id": "4760268021"}, "variants"),
+        call("modify_pending_order_items", modified, "modify"),
+        AIMessage(content=draft),
+        AIMessage(content="How can I help with your new question?"),
+    ], return_receipt_response=True)
+
+    async def run():
+        thread = "mixed-receipts"
+        first = await worker.run_turn(thread, {"kind": "message", "text":
+            f"My email is {email}. Return the more expensive speaker that is not water resistant. "
+            "Modify the 17-inch laptop in another order to 13-inch. "
+            "If the exact version is unavailable, list all available 13-inch options." + extra_request}, config)
+        assert first["status"] == "needs_confirmation"
+        second = await worker.run_turn(thread, {"kind": "confirmation", "accepted": True,
+                                               "proposal_id": first["request"]["proposal_id"]}, config)
+        assert second["status"] == "needs_confirmation"
+        proposal_id = second["request"]["proposal_id"]
+        if recover_commit:
+            assert worker.environment.confirm_action(thread, proposal_id, True)["ok"]
+            assert worker.environment.dispatch_tool(thread, "modify_pending_order_items", modified)["ok"]
+        final = await worker.run_turn(thread, {"kind": "confirmation", "accepted": True, "proposal_id": proposal_id},
+                                      config)
+        assert final["status"] == "answered"
+        if extra_request:
+            assert final["text"] == draft
+            return
+        assert final["usage"]["original_model_answer"] == draft
+        for fact in ("Bluetooth Speaker", "return requested", "PayPal", "13-inch", "16GB", "113.71",
+                     "No real payment was sent", "6056040996", "1657832319", "5052031638"):
+            assert fact.lower() in final["text"].lower()
+        assert "101.31" not in final["text"]
+        assert "still proposals" not in final["text"]
+        assert "charged to your PayPal" not in final["text"]
+
+        next_request = await worker.run_turn(thread, {"kind": "message", "text": "I have a new question."}, config)
+        assert next_request["text"] == "How can I help with your new question?"
+
+    asyncio.run(run())

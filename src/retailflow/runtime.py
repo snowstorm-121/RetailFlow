@@ -18,6 +18,7 @@ from react_agent.context import Context
 from react_agent.graph import make_retail_graph
 from react_agent.utils import load_chat_model
 from retailflow.environment import RetailEnvironment
+from retailflow.receipts import mixed_item_receipt_reply
 from retailflow.cancel_goals import is_explicit_all_pending_request
 from retailflow.upstream.paths import RETAIL_DB_PATH
 
@@ -143,24 +144,30 @@ class RetailRuntime:
                 if isinstance(outcome.get("data"), dict):
                     summary["status"] = outcome["data"].get("status")
                     order = outcome["data"]
+                    if action_name in {"modify_pending_order_address", "modify_user_address",
+                                       "return_delivered_order_items", "modify_pending_order_items"}:
+                        summary["user_id"] = order.get("user_id")
+                    if action_name in {"return_delivered_order_items", "modify_pending_order_items"}:
+                        summary["proposal_id"] = outcome["proposal_id"]
                     if action_name in {"modify_pending_order_address", "modify_user_address"}:
                         summary["updated_address"] = order["address"]
-                        summary["user_id"] = order.get("user_id")
                     if order.get("status") == "cancelled":
                         methods = self.environment.load_session(thread_id)["business"]["users"][order["user_id"]]["payment_methods"]
                         summary["refunds"] = [{**payment, "timing": "immediate" if
                             methods[payment["payment_method_id"]]["source"] == "gift_card" else "5 to 7 business days"}
                             for payment in order["payment_history"] if payment["transaction_type"] == "refund"]
                     elif order.get("status") == "return requested":
+                        names = {item["item_id"]: item["name"] for item in order["items"]}
                         summary["return_details"] = {"item_ids": order["return_items"],
-                            "items": [{"item_id": item["item_id"], "name": item["name"]}
-                                      for item in order["items"] if item["item_id"] in order["return_items"]],
+                            "items": [{"item_id": item_id, "name": names[item_id]} for item_id in order["return_items"]],
                             "payment_method_id": order["return_payment_method_id"], "refund_status": "not_settled",
                             "additional_return_allowed": False,
                             "instructions": "The retail policy expects return instructions by email; this local environment sends no real email."}
                     elif order.get("status") == "pending (item modified)":
                         summary["modification_details"] = {"items": order["items"],
                             "simulated_payment": order["payment_history"][-1], "real_payment_sent": False}
+                        if action_name == "modify_pending_order_items":
+                            summary["modification_details"]["new_item_ids"] = (receipt or pending)["args"]["new_item_ids"]
                     elif order.get("status") == "exchange requested":
                         summary["exchange_details"] = {key: order[key] for key in (
                             "exchange_items", "exchange_new_items", "exchange_payment_method_id", "exchange_price_difference")}
@@ -246,7 +253,16 @@ class RetailRuntime:
                 else:
                     failure_reason = type(exc).__name__
 
-        if (config.get("return_receipt_response", False) and confirmed_outcome
+        mixed_reply = None
+        if (status == "answered" and confirmed_outcome
+                and confirmed_outcome.get("data", {}).get("status") in {"return requested", "pending (item modified)"}):
+            mixed_reply = mixed_item_receipt_reply(messages, confirmed_outcome["data"]["user_id"])
+        if mixed_reply is not None:
+            metrics["original_model_answer"] = text
+            text = mixed_reply
+            messages.append(AIMessage(content=text, additional_kwargs={"application_rendered_receipt": True}))
+            metrics["application_rendered_receipt"] = True
+        elif (config.get("return_receipt_response", False) and confirmed_outcome
                 and status == "answered" and confirmed_outcome.get("data", {}).get("status") == "return requested"):
             order = confirmed_outcome["data"]
             selected = set(order["return_items"])

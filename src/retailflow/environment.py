@@ -91,9 +91,9 @@ class RetailEnvironment:
 
     def receipt_for_proposal(self, thread_id: str, proposal_id: str):
         with self.storage.transaction() as db:
-            row = db.execute("SELECT name, result_json FROM receipts WHERE thread = ? AND "
+            row = db.execute("SELECT name, args_json, result_json FROM receipts WHERE thread = ? AND "
                              "json_extract(result_json, '$.proposal_id') = ?", (thread_id, proposal_id)).fetchone()
-        return {"name": row["name"], "result": json.loads(row["result_json"])} if row else None
+        return {"name": row["name"], "args": json.loads(row["args_json"]), "result": json.loads(row["result_json"])} if row else None
 
     def pending_proposal(self, thread_id: str):
         with self.storage.transaction() as db:
