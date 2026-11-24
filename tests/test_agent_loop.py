@@ -215,3 +215,94 @@ def test_cli_reports_unsuccessful_execution_to_shell(tmp_path, monkeypatch, stat
 
     monkeypatch.setattr(cli, "run_turn", stopped)
     assert asyncio.run(cli.chat("a", config, "Query my order")) == 1
+
+
+def test_identity_question_does_not_request_an_unmentioned_address(tmp_path):
+    question = ("Could you please provide your email or full name and ZIP code so I can locate your order "
+                "and confirm eligibility for a return?")
+    worker, _, config = runtime(tmp_path, [
+        call("ask_user", {"fields": ["identity", "address"], "question": question}, "clarify"),
+    ])
+    result = asyncio.run(worker.run_turn("clarify-address", {"kind": "message", "text":
+        "Change my luggage set to a coat. If that cannot be done, return that item."}, config))
+    assert result["status"] == "needs_input"
+    assert result["request"] == {"fields": ["identity"], "question": question}
+
+
+def test_successful_read_retry_reuses_evidence_and_still_allows_new_read(tmp_path, monkeypatch):
+    profile = {"user_id": "yara_muller_8652"}
+    worker, model, config = runtime(tmp_path, [
+        call("find_user_id_by_name_zip", {"first_name": "Yara", "last_name": "Muller", "zip": "85041"}, "identity"),
+        call("get_user_details", profile, "profile"),
+        call("get_user_details", profile, "repeated-profile"),
+        call("get_order_details", {"order_id": "#W5056519"}, "order"),
+        AIMessage(content="The selected order is pending."),
+        call("get_user_details", profile, "new-turn-profile"),
+        AIMessage(content="Here is your account."),
+    ])
+    dispatch = worker.environment.dispatch_tool
+    profile_reads = []
+
+    def tracked_dispatch(thread, name, args):
+        if name == "get_user_details":
+            profile_reads.append(args)
+        return dispatch(thread, name, args)
+
+    monkeypatch.setattr(worker.environment, "dispatch_tool", tracked_dispatch)
+
+    async def run():
+        result = await worker.run_turn("read-progress", {"kind": "message", "text":
+            "Yara Muller ZIP 85041. Check my account and order #W5056519."}, config)
+        assert result["status"] == "answered"
+        assert profile_reads == [profile]
+        assert result["usage"]["reused_reads"] == 1
+        repeated = next(m for m in model.inputs[-2] if isinstance(m, ToolMessage)
+                        and m.tool_call_id == "repeated-profile")
+        payload = json.loads(repeated.content)
+        assert payload["ok"] and payload["data"]["user_id"] == profile["user_id"]
+        assert "already succeeded" in payload["message"]
+        again = await worker.run_turn("read-progress", {"kind": "message", "text": "Check my account again."}, config)
+        assert again["status"] == "answered"
+        assert profile_reads == [profile, profile]
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(("text", "question"), [
+    ("Change the shipping address for my order.", "What are your email and new shipping address?"),
+    ("Can you help with my order?", "What are your email, city, and postal code?"),
+    ("Can you help with my order?", "Please give me your email and the ZIP code for the new destination."),
+])
+def test_identity_question_preserves_a_requested_shipping_address(tmp_path, text, question):
+    args = {"fields": ["identity", "address"], "question": question}
+    worker, _, config = runtime(tmp_path, [call("ask_user", args, "clarify")])
+    result = asyncio.run(worker.run_turn("shipping-address", {"kind": "message", "text":
+        text}, config))
+    assert result["request"] == args
+
+
+def test_revisiting_an_order_preserves_active_order_selection(tmp_path, monkeypatch):
+    first, second = "#W5056519", "#W5995614"
+    worker, _, config = runtime(tmp_path, [
+        call("find_user_id_by_name_zip", {"first_name": "Yara", "last_name": "Muller", "zip": "85041"}, "identity"),
+        call("get_order_details", {"order_id": first}, "first"),
+        call("get_order_details", {"order_id": second}, "second"),
+        call("get_order_details", {"order_id": first}, "revisit"),
+        call("get_order_details", {"order_id": first}, "repeat"),
+        AIMessage(content="Order details checked."),
+    ])
+    dispatch = worker.environment.dispatch_tool
+    orders = []
+
+    def tracked_dispatch(thread, name, args):
+        if name == "get_order_details":
+            orders.append(args["order_id"])
+        return dispatch(thread, name, args)
+
+    monkeypatch.setattr(worker.environment, "dispatch_tool", tracked_dispatch)
+    result = asyncio.run(worker.run_turn("order-target", {"kind": "message", "text":
+        "Yara Muller ZIP 85041. Compare my two pending orders."}, config))
+    assert result["status"] == "answered"
+    assert result["usage"]["reused_reads"] == 1
+    assert orders == [first, second, first]
+    assert worker.environment.load_session("order-target")["target_order_id"] == first

@@ -177,6 +177,9 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
     continuation_checked = False
     account_copy_retry_draft_id = None
     focused_step = None
+    reusable_reads = IDENTITY_TOOLS | {"get_user_details", "get_order_details"}
+    successful_reads = {}
+    metrics.setdefault("reused_reads", 0)
 
     def persist(state, messages):
         if persist_messages:
@@ -190,6 +193,10 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
     def request_text(messages):
         return advisory_opening([m.content for m in messages
                                  if isinstance(m, HumanMessage) and isinstance(m.content, str)])
+
+    def read_scope(session):
+        last_receipt = session.get("last_receipt") or {}
+        return session["user_id"], last_receipt.get("result", {}).get("proposal_id")
 
     def address_copy_evidence(messages, opening, session):
         if not opening or not session.get("user_id"):
@@ -694,6 +701,9 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         start = time.perf_counter()
         retries = 0
         copy = None
+        read_key = None
+        read_session = None
+        reused_read = False
         focused_key = "user_id" if focused_step and "user_id" in focused_step else "order_id"
         focused_mismatch = bool(focused_step and name in WRITE_TOOLS and
                                 (name, args.get(focused_key)) != (focused_step["tool"], focused_step[focused_key]))
@@ -730,13 +740,40 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                     and isinstance(args["fields"], list) and args["fields"]
                     and all(isinstance(field, str) and field in ASK_USER_FIELDS for field in args["fields"])
                     and len(set(args["fields"])) == len(args["fields"])):
+                customer_text = " ".join(message.content for message in active_request(state["messages"])
+                                         if isinstance(message, HumanMessage) and isinstance(message.content, str))
+                address_text = re.sub(r"\be-?mail address\b", "email", args["question"] + " " + customer_text, flags=re.I)
+                question = args["question"]
+                identity_zip = not re.search(r"\bZIP\b", question, re.I) or re.search(
+                    r"\b(?:full|first|last) name and (?:your )?ZIP\b", question, re.I)
+                if (set(args["fields"]) == {"identity", "address"} and identity_zip
+                        and re.search(r"\b(?:e-?mail|(?:full|first|last) name)\b", args["question"], re.I)
+                        and not re.search(r"\b(?:address|street|suite|apartment|ship\w*|delivery|mailing|where|"
+                                          r"city|state|country|province|town|postcode|postal code|house|destination)\b",
+                                          address_text, re.I)):
+                    args = {**args, "fields": ["identity"]}
+                    metrics["clarification_fields_normalized"] = metrics.get("clarification_fields_normalized", 0) + 1
                 result = {"ok": True, "code": "NEEDS_INPUT", "data": args}
                 status, request = "needs_input", args
             else:
                 result = {"ok": False, "code": "INVALID_ARGUMENT", "message": "ask_user needs fields and question."}
                 status, request = "running", None
         else:
-            if (name == "cancel_pending_order" and goal_state is not None
+            if name in reusable_reads and valid_arguments(name, args):
+                read_key = (name, json.dumps(args, sort_keys=True))
+            cached = successful_reads.get(read_key)
+            if cached:
+                session = environment.load_session(thread_id)
+                if (cached[0] != read_scope(session) or session.get("pending_action")
+                        or (name == "get_order_details" and session["target_order_id"] != args["order_id"])):
+                    cached = None
+            if cached:
+                result = {**cached[1],
+                          "message": "This exact read already succeeded in this turn. Use its verified data. "
+                                     "Take the next unresolved step or read a different target if needed."}
+                reused_read = True
+                metrics["reused_reads"] += 1
+            elif (name == "cancel_pending_order" and goal_state is not None
                     and (goal_state.get("needs_refresh") or goal_state.get("scope") == "none"
                          or args.get("order_id") not in (goal_state.get("targets") or []))):
                 result = {"ok": False, "code": "POLICY_DENIED", "message": "Cancellation is outside the recorded goal. No proposal was created."}
@@ -800,7 +837,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             else:
                 result = environment.dispatch_tool(thread_id, name, args)
             metrics["tool_attempts"].append({"tool_call_id": call["id"], "name": name, "args": args,
-                                             "code": result["code"], "message": result.get("message"), "attempt": 1})
+                                             "code": result["code"], "message": result.get("message"), "attempt": 1,
+                                             **({"reused_read": True} if reused_read else {})})
             while (result["code"] == "TEMPORARY_FAILURE" and name not in WRITE_TOOLS
                    and retries < min(1, max(0, int(config.get("max_retry_per_call", 1))))):
                 retries += 1
@@ -814,10 +852,10 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         if config.get("catalog_availability_facts", False) and name == "get_product_details" and result["ok"]:
             result["data"]["available_variant_count"] = sum(
                 variant["available"] is True for variant in result["data"]["variants"].values())
-        if name in {"get_order_details", "get_product_details", "get_user_details"} and result["ok"]:
+        if name in {"get_order_details", "get_product_details", "get_user_details"} and result["ok"] and not reused_read:
             active = active_request(state["messages"])
             opening = request_text(active)
-            session = environment.load_session(thread_id)
+            session = read_session = environment.load_session(thread_id)
             targets = item_change_targets(opening, session["business"], session["user_id"])
             if name == "get_user_details":
                 copy = address_copy_evidence(active, opening, session)
@@ -861,7 +899,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                             if candidates:
                                 product["available_option_hits"] = candidates
                         break
-        if config.get("profile_order_summaries", False) and name == "get_user_details" and result["ok"]:
+        if config.get("profile_order_summaries", False) and name == "get_user_details" and result["ok"] and not reused_read:
             session = environment.load_session(thread_id)
             result["data"]["order_summaries"] = [
                 {"order_id": order_id, "status": order["status"],
@@ -869,8 +907,14 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                            for item in order["items"]]}
                 for order_id in result["data"]["orders"]
                 if (order := session["business"]["orders"][order_id])["user_id"] == session["user_id"]]
+        if read_key is not None and result["ok"] and not reused_read:
+            if name == "get_order_details":
+                for key in tuple(successful_reads):
+                    if key[0] == name:
+                        del successful_reads[key]
+            successful_reads[read_key] = (read_scope(read_session or environment.load_session(thread_id)), result)
         metrics["tool_seconds"] += time.perf_counter() - start
-        metrics["tool_calls"] += 1 + retries
+        metrics["tool_calls"] += int(not reused_read) + retries
         metadata = {"focused_write_mismatch": True} if focused_mismatch else {}
         if copy and status == "needs_confirmation" and name in ADDRESS_TOOLS:
             metadata.update(address_copy=copy, address_copy_user_id=session["user_id"])
