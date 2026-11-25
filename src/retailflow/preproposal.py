@@ -110,6 +110,62 @@ def cross_product_cancel_target(text, business, user_id):
     return order_id
 
 
+def item_cancel_fallbacks(text, business, user_id):
+    """Resolve explicit item fallbacks only when every write clause can be verified."""
+    if not user_id:
+        return [], ""
+    request = re.compile(
+        r"(?:please |can you )?(?:(?:change|modify) my (?P<name>[a-z -]+?) to "
+        r"(?P<options>[a-z0-9 ,.-]+?)(?:, keeping its (?P<keep>[a-z ,]+?))?"
+        r"[.?;] +if (?:that option is )?unavailable|"
+        r"remove (?:the|my) (?P<removed>[a-z -]+?)(?: i ordered by mistake)?"
+        r"; +if removing one item is impossible), +cancel "
+        r"(?:the|that) (?:whole |entire )?order"
+        r"(?: as (?P<reason>ordered by mistake|no longer needed)| and i will buy again)?(?:[.!] +|[.!]?$)",
+        re.I,
+    )
+    owned = [business["orders"][key] for key in business["users"][user_id]["orders"]
+             if business["orders"][key]["user_id"] == user_id]
+    remaining = text.strip().lower()
+    steps = []
+    while match := request.match(remaining):
+        clause = match.groupdict()
+        name = clause["name"] or clause["removed"]
+        matches = [(order, item) for order in owned for item in order["items"] if item["name"].lower() == name]
+        if len(matches) != 1 or matches[0][0]["status"] not in {"pending", "cancelled"}:
+            return [], ""
+        order, item = matches[0]
+        explanation = "Removing just one item from the order was unavailable."
+        if clause["options"]:
+            variants = business["products"][item["product_id"]]["variants"]
+            keep = re.split(r", *(?:and )?| and ", clause["keep"]) if clause["keep"] else []
+            if any(key not in item["options"] for key in keep):
+                return [], ""
+            wanted = {key: item["options"][key] for key in keep}
+            for option in map(str.strip, clause["options"].split(",")):
+                option = re.sub(r"^(\d+) (?:foot|feet|ft)(?: tall)?$", r"\1 ft", option)
+                hits = {(key, value) for variant in variants.values() for key, value in variant["options"].items()
+                        if str(value).lower() == option}
+                if len(hits) != 1:
+                    return [], ""
+                key, value = hits.pop()
+                if key in wanted and wanted[key] != value:
+                    return [], ""
+                wanted[key] = value
+            if any(v["available"] is True and all(v["options"].get(k) == value for k, value in wanted.items())
+                   for v in variants.values()):
+                return [], ""
+            explanation = "The requested product variant was unavailable."
+        if any(step["order_id"] == order["order_id"] for step in steps):
+            return [], ""
+        steps.append({"order_id": order["order_id"], "reason": clause["reason"], "explanation": explanation})
+        remaining = remaining[match.end():]
+    if remaining and not re.fullmatch(r"(?:also )?tell me the total paid for (?:all |the )?"
+                                      r"[a-z -]+ in (?:my )?prior orders[.!?]?", remaining):
+        return [], ""
+    return (steps, remaining) if steps else ([], "")
+
+
 def item_order_excluded(text, order_id):
     """Check an explicit order exclusion even when the alternative cannot be identified."""
     return (
@@ -219,15 +275,16 @@ def preserved_variant_conflicts(customer_text, business, user_id, args):
 
 
 def false_cancellation_claim(text, business, user_id, committed_orders=(), *, unresolved_cancellation=False):
-    start = r"^[\s>*`_#-]*(?:\d+\.\s*)?(?:[*`_]+\s*)?"
+    start = r"^[\s>*`_#✅-]*(?:\d+\.\s*)?(?:[*`_]+\s*)?"
     order_ref = r"(?:(?:your\s+)?order\s+)?(#W\d+)[*`_]*(?:\s*\([^\n()]{1,80}\))?[*`_]*\s+(?:[—–-]\s+)?"
     cancel = r"(?:successfully\s+)?cancel(?:l)?ed\b"
     completion = r"(?:initiated|confirmed|completed|processed)\b"
-    for sentence in re.split(r"(?<=[.!?])\s+|\n|;\s*|,\s+and\s+", text, flags=re.I):
+    for sentence in re.split(r"(?<=[.!?])\s+|\n|;\s*|,\s+and\s+|\s+and\s+(?=" + cancel + ")",
+                             text, flags=re.I):
         if "?" in sentence:
             continue
-        operation = re.match(start + r"(?:I\s+(?:have\s+)?(?:just\s+)?" + cancel
-                             + r"\s+(?:order\s+)?(#W\d+)\b|Cancellation of\s+" + order_ref
+        operation = re.match(start + r"(?:(?:I\s+(?:have\s+)?(?:just\s+)?)?" + cancel
+                             + r"\s+(?:order\s+)?[*`_]*(#W\d+)\b|Cancellation of\s+" + order_ref
                              + r"(?:was|has been|is now)\s+" + completion + ")", sentence, re.I)
         if operation and (operation[1] or operation[2]).upper() not in committed_orders:
             return True

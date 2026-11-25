@@ -315,8 +315,9 @@ class RetailRuntime:
                     metrics["original_model_answer"] = text
                     text = (f"Order {order['order_id']} was cancelled after confirmation. "
                             f"Cancellation reason: {order['cancel_reason']}. "
-                            "A change to a different product was unavailable. "
-                            "The order was ineligible for return before cancellation.")
+                            + message.additional_kwargs.get("cancel_fallback_explanation",
+                                "A change to a different product was unavailable. "
+                                "The order was ineligible for return before cancellation."))
                     if summary["refunds"]:
                         refunds = []
                         for payment in summary["refunds"]:

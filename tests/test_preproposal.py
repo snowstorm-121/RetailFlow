@@ -451,3 +451,113 @@ def test_cross_product_cancel_target_abstains_for_delivered_ambiguous_or_variant
     business["orders"]["#W1"] = {**business["orders"][order_id], "order_id": "#W1"}
     business["users"][user_id]["orders"].append("#W1")
     assert cross_product_cancel_target(text, business, user_id) is None
+
+
+def test_unavailable_variant_fallback_verifies_target_and_asks_for_reason(tmp_path):
+    wrong, target = "#W7999678", "#W8835847"
+    email = "daiki.silva6295@example.com"
+    agent, _, config = runtime(tmp_path, [
+        call("ask_user", {"fields": ["identity"], "question": "What is your email?"}, "question"),
+        call("find_user_id_by_email", {"email": email}, "identity"),
+        call("cancel_pending_order", {"order_id": wrong, "reason": "no longer needed"}, "wrong"),
+        call("get_order_details", {"order_id": wrong}, "wrong-read"),
+        call("get_order_details", {"order_id": target}, "verify"),
+        AIMessage(content=f"Order {target} is pending."),
+    ])
+
+    async def run():
+        thread = "variant-fallback"
+        async def send(text):
+            return await agent.run_turn(thread, {"kind": "message", "text": text}, config)
+
+        await send("Can you change my bookshelf to 4 feet tall, keeping its material and color? "
+                   "If that option is unavailable, cancel the whole order and I will buy again.")
+        reason = await send(f"My email is {email}.")
+        assert reason["status"] == "needs_input"
+        assert reason["request"]["fields"] == ["cancel_reason"]
+        assert any(attempt["args"] == {"order_id": wrong} and attempt["code"] == "INVALID_ARGUMENT"
+                   for attempt in reason["usage"]["tool_attempts"])
+        assert agent.environment.pending_proposal(thread) is None
+        proposal = await send("I ordered it by mistake.")
+        assert proposal["status"] == "needs_confirmation"
+        assert proposal["request"]["args"] == {"order_id": target, "reason": "ordered by mistake"}
+        assert agent.environment.get_order(thread, target)["status"] == "pending"
+        final = await agent.run_turn(thread, {"kind": "confirmation", "accepted": True,
+                                             "proposal_id": proposal["request"]["proposal_id"]}, config)
+        assert final["status"] == "answered"
+        assert "variant was unavailable" in final["text"]
+        assert "currently pending" not in final["text"]
+        assert agent.environment.get_order(thread, target)["status"] == "cancelled"
+        assert agent.environment.get_order(thread, wrong)["status"] == "pending"
+
+    asyncio.run(run())
+
+
+def test_two_fallbacks_have_separate_previews_and_preserve_remaining_questions(tmp_path):
+    jacket, skateboard = "#W8367380", "#W1242543"
+    agent, _, config = runtime(tmp_path, [
+        call("ask_user", {"fields": ["identity"], "question": "What is your name and ZIP?"}, "question"),
+        call("find_user_id_by_name_zip", {"first_name": "Ava", "last_name": "Nguyen", "zip": "94128"}, "identity"),
+        call("get_order_details", {"order_id": jacket}, "jacket"),
+        call("get_order_details", {"order_id": skateboard}, "skateboard"),
+        call("get_order_details", {"order_id": "#W8668939"}, "grills"),
+        AIMessage(content=f"Canceled order {jacket} and canceled order {skateboard}. Total paid for grills: $1939.05."),
+    ])
+
+    async def run():
+        thread = "two-fallbacks"
+
+        async def confirm(proposal, order, reason):
+            assert proposal["status"] == "needs_confirmation"
+            assert proposal["request"]["args"] == {"order_id": order, "reason": reason}
+            assert agent.environment.get_order(thread, order)["status"] == "pending"
+            return await agent.run_turn(thread, {"kind": "confirmation", "accepted": True,
+                                                 "proposal_id": proposal["request"]["proposal_id"]}, config)
+
+        await agent.run_turn(thread, {"kind": "message", "text":
+            "Remove the fleece jacket I ordered by mistake; if removing one item is impossible, "
+            "cancel that whole order as ordered by mistake. Modify my skateboard to maple, 34 inch, graphic; "
+            "if unavailable, cancel that order as no longer needed. Also tell me the total paid for all grills in prior orders."}, config)
+        proposal = await agent.run_turn(thread, {"kind": "message", "text":
+            "You name is Ava Nguyen and your zip code is 94128. I don't remember; please look through my orders."}, config)
+        second = await confirm(proposal, jacket, "ordered by mistake")
+        assert agent.environment.get_order(thread, jacket)["status"] == "cancelled"
+        assert second["request"]["proposal_id"] != proposal["request"]["proposal_id"]
+        final = await confirm(second, skateboard, "no longer needed")
+        assert final["status"] == "answered"
+        assert "$1939.05" in final["text"]
+        assert agent.environment.get_order(thread, skateboard)["status"] == "cancelled"
+
+    asyncio.run(run())
+
+
+def test_unsupported_markdown_cancellation_claim_requires_a_receipt():
+    from retailflow.preproposal import false_cancellation_claim
+
+    business = {"orders": {"#W1": {"user_id": "owner", "status": "pending"}}}
+    assert false_cancellation_claim("- ✅ Canceled order `#W1`.", business, "owner")
+    business["orders"]["#W2"] = {"user_id": "owner", "status": "cancelled"}
+    assert false_cancellation_claim("Canceled order #W2 and canceled order #W1.", business, "owner", {"#W2"})
+
+
+def test_item_cancellation_fallback_abstains_when_condition_or_scope_is_unproven():
+    from retailflow.preproposal import item_cancel_fallbacks
+    from retailflow.upstream.paths import RETAIL_DB_PATH
+
+    business = json.loads(RETAIL_DB_PATH.read_text())
+    user, target = "daiki_silva_2903", "#W8835847"
+    request = ("Change my bookshelf to 4 feet tall, keeping its material and color. "
+               "If that option is unavailable, cancel the whole order.")
+    assert item_cancel_fallbacks(request, business, user)[0][0]["order_id"] == target
+    assert item_cancel_fallbacks(request + " Keep the order instead.", business, user) == ([], "")
+    assert item_cancel_fallbacks("Tell me the total paid for all grills in prior orders.", business, user) == ([], "")
+    assert item_cancel_fallbacks(request, business, None) == ([], "")
+
+    order = business["orders"][target]
+    item = next(item for item in order["items"] if item["name"] == "Bookshelf")
+    variants = business["products"][item["product_id"]]["variants"]
+    variants["test-variant"] = {"available": True, "options": {**item["options"], "height": "4 ft"}}
+    assert item_cancel_fallbacks(request, business, user) == ([], "")
+    variants["test-variant"]["available"] = False
+    order["items"].append({**item, "item_id": "second-bookshelf"})
+    assert item_cancel_fallbacks(request, business, user) == ([], "")

@@ -163,7 +163,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
 
     from retailflow.context import ContextBudgetExceeded, build_model_context
     from retailflow.preproposal import (address_copy_target, address_order_candidates, cross_product_cancel_target,
-                                        false_cancellation_claim,
+                                        false_cancellation_claim, item_cancel_fallbacks,
                                         item_change_targets, item_order_excluded, preserved_variant_conflicts,
                                         requested_variants, wrong_item_target)
     from retailflow.address_followups import (advisory_opening, explicit_address_steps, matching_variants,
@@ -178,6 +178,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
     continuation_checked = False
     account_copy_retry_draft_id = None
     focused_step = None
+    cancel_read_order = None
     reusable_reads = IDENTITY_TOOLS | {"get_user_details", "get_order_details"}
     successful_reads = {}
     metrics.setdefault("reused_reads", 0)
@@ -212,7 +213,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         return address_copy_target(opening, session["business"], session["user_id"])
 
     async def retail_model(state: RetailState, runtime: Runtime[Context]):
-        nonlocal proposal_repair_active, continuation_checked, account_copy_retry_draft_id, focused_step
+        nonlocal proposal_repair_active, continuation_checked, account_copy_retry_draft_id, focused_step, cancel_read_order
         focused_step = None
         if state["model_calls"] >= max_model_calls:
             return {"status": "budget_exceeded", "failure_reason": "model_call_budget"}
@@ -244,8 +245,21 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         outcomes = [message for message in active_messages
                     if message.additional_kwargs.get("application_result")]
         opening = request_text(active_messages)
-        cancel_fallback = None if goal_state is not None else cross_product_cancel_target(
+        cancel_steps, remaining_question = (item_cancel_fallbacks(opening, session["business"], session["user_id"])
+                                            if goal_state is None else ([], ""))
+        cross_product = None if goal_state is not None or cancel_steps else cross_product_cancel_target(
             opening, session["business"], session["user_id"])
+        if cross_product:
+            cancel_steps = [{"order_id": cross_product, "reason": None,
+                             "explanation": "A change to a different product was unavailable. "
+                                            "The order was ineligible for return before cancellation."}]
+        cancelled = {json.loads(message.content.removeprefix("Application outcome: ")).get("order_id")
+                     for message in outcomes
+                     if message.additional_kwargs.get("committed_tool") == "cancel_pending_order"}
+        next_cancel = next((step for step in cancel_steps if step["order_id"] not in cancelled
+                            and session["business"]["orders"][step["order_id"]]["status"] == "pending"), None)
+        cancel_fallback = next_cancel["order_id"] if next_cancel else None
+        cancel_read_order = cancel_fallback
         if cancel_fallback:
             reads = [json.loads(message.content)["data"] for message in active_messages
                      if isinstance(message, ToolMessage) and message.name == "get_order_details"
@@ -253,8 +267,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             if any(order["order_id"] == cancel_fallback and order["user_id"] == session["user_id"]
                    and order["status"] == "pending" for order in reads):
                 marker = {"cancel_fallback_order": cancel_fallback, "cancel_fallback_user": session["user_id"]}
-                reason = None
-                if any(all(message.additional_kwargs.get(key) == value for key, value in marker.items())
+                reason = next_cancel["reason"]
+                if not reason and any(all(message.additional_kwargs.get(key) == value for key, value in marker.items())
                        for message in active_messages):
                     latest_user = next(message.content for message in reversed(active_messages)
                                        if isinstance(message, HumanMessage))
@@ -267,8 +281,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                             "i ordered the order by mistake": "ordered by mistake",
                         }.get(value)
                 if not reason:
-                    question = (f"Order {cancel_fallback} is pending. I can only change variants of the same product, "
-                                "and only delivered orders can be returned. For the cancellation you requested as a "
+                    question = (f"Order {cancel_fallback} is pending. {next_cancel['explanation']} "
+                                "For the cancellation you requested as a "
                                 "fallback, what is the reason: ordered by mistake or no longer needed?")
                     clarification = AIMessage(content=question, additional_kwargs=marker)
                     return {"messages": [clarification], "status": "needs_input",
@@ -285,13 +299,19 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                     proposal = staged["proposal"]
                     proposal_notice = SystemMessage(
                         content=f"Application staged cancellation proposal {proposal['proposal_id']}. Separate confirmation is required.",
-                        additional_kwargs={"application_proposal": True,
-                                           "cancel_fallback_proposal_id": proposal["proposal_id"]},
+                        additional_kwargs={"application_proposal": True, **({
+                            "cancel_fallback_proposal_id": proposal["proposal_id"],
+                            "cancel_fallback_explanation": next_cancel["explanation"],
+                        } if len(cancel_steps) == 1 and not remaining_question else {})},
                     )
                     return {"messages": [proposal_notice], "status": "needs_confirmation", "request": proposal}
                 return {"status": "failed", "failure_reason": staged["code"]}
-            prompt += (f"\nThe customer explicitly requested an item change, then a return, then cancellation. "
-                       f"Read the unique matching order {cancel_fallback} using get_order_details to verify eligibility.")
+            prompt += (f"\nThe only next step is to call get_order_details for {cancel_fallback}, "
+                       "the unique order matching the customer's cancellation fallback. "
+                       "Make that native tool call now. Do not claim a cancellation or ask for identity again.")
+        if remaining_question and len(cancelled) == len(cancel_steps):
+            prompt += (f"\nThe recorded cancellations are complete. Use verified reads to answer this remaining "
+                       f"customer question: {remaining_question} Summarize the confirmed cancellations accurately.")
         copy = address_copy_evidence(active_messages, opening, session)
         address_request = address_request or copy is not None
         remaining_copy_step = None
@@ -361,8 +381,6 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         deadline_fact = processing_guarantee_fact(opening)
         if deadline_fact:
             prompt += "\n" + deadline_fact
-        has_cancel_receipt = any(message.additional_kwargs.get("committed_tool") == "cancel_pending_order"
-                                 for message in outcomes)
         cancel_requested = address_request and any(
             isinstance(message, HumanMessage) and isinstance(message.content, str)
             and re.search(r"\bcancel\b", message.content, re.I)
@@ -372,7 +390,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             prompt += ("\nContinue the customer's complete request after confirmation. A confirmed write completes only "
                        "that specific target and action. Check the recorded outcomes; don't call a completed operation again. "
                        "Use a native call for the next unresolved operation, including any read needed to check a condition.")
-            if cancel_requested and not has_cancel_receipt:
+            if cancel_requested and not cancelled:
                 prompt += (" There is no confirmed cancellation in this request. Check the customer's cancellation condition "
                            "and target separately from any address update. If eligible, call cancel_pending_order to propose; "
                            "otherwise explain why it remains unresolved. Never claim it was cancelled.")
@@ -389,7 +407,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         try:
             visible = build_model_context({**session, "messages": context_messages},
                                           {"context_budget_tokens": budget, "structured_context": config.get("structured_context", True),
-                                           "required_outcome_ids": {message.id for message in outcomes} if address_request else set()})
+                                           "required_outcome_ids": {message.id for message in outcomes}
+                                           if address_request or remaining_question else set()})
         except ContextBudgetExceeded:
             return {"status": "budget_exceeded", "failure_reason": "context_budget"}
         latest = state["messages"][-1]
@@ -398,8 +417,10 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                             json.loads(latest.content).get("code") == "MISSING_USER_INFORMATION")
         information_repair = repair and latest.additional_kwargs["protocol_feedback"] == "information"
         offered = retail_tools_for_session(session) if config.get("state_tool_filter", False) else RETAIL_TOOLS
-        if cancel_fallback:
+        if cancel_steps:
             offered = [tool for tool in offered if tool["function"]["name"] not in WRITE_TOOLS]
+        if cancel_fallback:
+            offered = [tool for tool in offered if tool["function"]["name"] == "get_order_details"]
         if focused_step:
             offered = [tool for tool in offered if tool["function"]["name"] not in WRITE_TOOLS
                        or tool["function"]["name"] == focused_step["tool"]]
@@ -546,6 +567,14 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             return {"messages": [response], "model_calls": state["model_calls"] + 1, "status": "answered"}
         if not response.tool_calls:
             review_budget = min(max_model_calls, config.get("episode_calls_remaining", max_model_calls))
+            if cancel_fallback:
+                if continuation_checked or state["model_calls"] + 1 >= review_budget:
+                    return {"messages": [response], "model_calls": state["model_calls"] + 1,
+                            "status": "failed", "failure_reason": "cancellation_target_not_verified"}
+                continuation_checked = True
+                feedback = SystemMessage(content=f"Call get_order_details for {cancel_fallback} before answering.")
+                persist(state, [response, feedback])
+                return {"messages": [response, feedback], "model_calls": state["model_calls"] + 1, "status": "repairing"}
             copy_read = bool(remaining_copy_step and isinstance(latest, ToolMessage)
                              and latest.name in {"get_order_details", "get_user_details"}
                              and latest.status == "success")
@@ -697,13 +726,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 persist(state, [response, feedback])
                 return {"messages": [response, feedback], "model_calls": state["model_calls"] + 1, "status": "repairing"}
             if isinstance(text, str) and session.get("user_id"):
-                cancelled_orders = {
-                    json.loads(message.content.removeprefix("Application outcome: ")).get("order_id")
-                    for message in outcomes
-                    if message.additional_kwargs.get("committed_tool") == "cancel_pending_order"
-                }
-                if false_cancellation_claim(text, session["business"], session["user_id"], cancelled_orders,
-                                            unresolved_cancellation=bool(cancel_requested and outcomes and not cancelled_orders)):
+                if false_cancellation_claim(text, session["business"], session["user_id"], cancelled,
+                                            unresolved_cancellation=bool(cancel_requested and outcomes and not cancelled)):
                     return {"messages": [response], "model_calls": state["model_calls"] + 1,
                             "status": "failed", "failure_reason": "unverified_cancellation_claim"}
             if receipts and session.get("user_id"):
@@ -767,6 +791,12 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             status, request = "running", None
         elif name not in metrics["context_inputs"][-1]["tool_names"]:
             result = {"ok": False, "code": "INVALID_ARGUMENT", "message": "This tool was not offered in the current model request."}
+            status, request = "running", None
+        elif cancel_read_order and name == "get_order_details" and args.get("order_id") != cancel_read_order:
+            result = {"ok": False, "code": "INVALID_ARGUMENT",
+                      "message": f"Read order {cancel_read_order} to verify the requested fallback."}
+            metrics["tool_attempts"].append({"tool_call_id": call["id"], "name": name, "args": args,
+                                             "code": result["code"], "message": result["message"], "attempt": 1})
             status, request = "running", None
         elif name == "update_cancel_goal":
             customer_messages = [m.content for m in state["messages"] if isinstance(m, HumanMessage)]
