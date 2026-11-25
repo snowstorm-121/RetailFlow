@@ -308,6 +308,28 @@ class RetailRuntime:
             for message in reversed(messages):
                 if message.additional_kwargs.get("request_start"):
                     break
+                fallback_proposal = message.additional_kwargs.get("cancel_fallback_proposal_id")
+                if (fallback_proposal and confirmed_outcome and summary.get("status") == "cancelled"
+                        and confirmed_outcome["proposal_id"] == fallback_proposal):
+                    order = confirmed_outcome["data"]
+                    metrics["original_model_answer"] = text
+                    text = (f"Order {order['order_id']} was cancelled after confirmation. "
+                            f"Cancellation reason: {order['cancel_reason']}. "
+                            "A change to a different product was unavailable. "
+                            "The order was ineligible for return before cancellation.")
+                    if summary["refunds"]:
+                        refunds = []
+                        for payment in summary["refunds"]:
+                            method = methods[payment["payment_method_id"]]
+                            label = method["source"].replace("_", " ")
+                            if method.get("last_four"):
+                                label += f" ending in {method['last_four']}"
+                            refunds.append(f"${payment['amount']:.2f} to {label} ({payment['timing']})")
+                        text += " Refunds in the local record and their policy timing: " + ", ".join(refunds) + "."
+                        text += " No real refund was issued."
+                    messages.append(AIMessage(content=text, additional_kwargs={"application_rendered_receipt": True}))
+                    metrics["application_rendered_receipt"] = True
+                    break
                 if message.additional_kwargs.get("committed_tool") != "modify_pending_order_items":
                     continue
                 receipt = json.loads(message.content.removeprefix("Application outcome: "))

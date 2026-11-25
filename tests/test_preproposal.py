@@ -386,7 +386,8 @@ def test_cross_product_fallback_uses_the_cancel_reason_and_a_separate_confirmati
         call("ask_user", {"fields": ["identity"], "question": "What is your name and ZIP?"}, "identity-question"),
         call("find_user_id_by_name_zip", {"first_name": "Aarav", "last_name": "Lee", "zip": "85025"}, "identity"),
         call("get_order_details", {"order_id": order_id}, "order"),
-        AIMessage(content="I will keep the order." if keep_order else f"Order {order_id} was canceled."),
+        AIMessage(content="I will keep the order." if keep_order else
+                  f"Order {order_id} was canceled. The order is currently pending."),
     ])
 
     async def run():
@@ -416,6 +417,15 @@ def test_cross_product_fallback_uses_the_cancel_reason_and_a_separate_confirmati
         final = await agent.run_turn(thread, {"kind": "confirmation", "accepted": True,
                                              "proposal_id": proposal["request"]["proposal_id"]}, config)
         assert final["status"] == "answered"
+        assert f"Order {order_id} was cancelled" in final["text"]
+        assert "currently pending" not in final["text"]
+        assert "no longer needed" in final["text"]
+        assert "different product was unavailable" in final["text"]
+        assert "ineligible for return before cancellation" in final["text"]
+        assert "$1464.00" in final["text"]
+        assert "5 to 7 business days" in final["text"]
+        assert "No real refund was issued" in final["text"]
+        assert "currently pending" in final["usage"]["original_model_answer"]
         assert agent.environment.get_order(thread, order_id)["status"] == "cancelled"
         assert agent.environment.get_order(thread, "#W3586556")["status"] == "pending"
 

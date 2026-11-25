@@ -285,7 +285,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                     proposal = staged["proposal"]
                     proposal_notice = SystemMessage(
                         content=f"Application staged cancellation proposal {proposal['proposal_id']}. Separate confirmation is required.",
-                        additional_kwargs={"application_proposal": True},
+                        additional_kwargs={"application_proposal": True,
+                                           "cancel_fallback_proposal_id": proposal["proposal_id"]},
                     )
                     return {"messages": [proposal_notice], "status": "needs_confirmation", "request": proposal}
                 return {"status": "failed", "failure_reason": staged["code"]}
