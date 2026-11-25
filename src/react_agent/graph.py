@@ -178,7 +178,6 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
     continuation_checked = False
     account_copy_retry_draft_id = None
     focused_step = None
-    cancel_read_order = None
     reusable_reads = IDENTITY_TOOLS | {"get_user_details", "get_order_details"}
     successful_reads = {}
     metrics.setdefault("reused_reads", 0)
@@ -213,7 +212,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         return address_copy_target(opening, session["business"], session["user_id"])
 
     async def retail_model(state: RetailState, runtime: Runtime[Context]):
-        nonlocal proposal_repair_active, continuation_checked, account_copy_retry_draft_id, focused_step, cancel_read_order
+        nonlocal proposal_repair_active, continuation_checked, account_copy_retry_draft_id, focused_step
         focused_step = None
         if state["model_calls"] >= max_model_calls:
             return {"status": "budget_exceeded", "failure_reason": "model_call_budget"}
@@ -259,11 +258,28 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         next_cancel = next((step for step in cancel_steps if step["order_id"] not in cancelled
                             and session["business"]["orders"][step["order_id"]]["status"] == "pending"), None)
         cancel_fallback = next_cancel["order_id"] if next_cancel else None
-        cancel_read_order = cancel_fallback
         if cancel_fallback:
-            reads = [json.loads(message.content)["data"] for message in active_messages
-                     if isinstance(message, ToolMessage) and message.name == "get_order_details"
-                     and message.status == "success"]
+            if cross_product:
+                reads = [json.loads(message.content)["data"] for message in active_messages
+                         if isinstance(message, ToolMessage) and message.name == "get_order_details"
+                         and message.status == "success"]
+            else:
+                args = {"order_id": cancel_fallback}
+                start = time.perf_counter()
+                max_attempts = 2 if int(config.get("max_retry_per_call", 1)) > 0 else 1
+                for attempt in range(1, max_attempts + 1):
+                    result = environment.dispatch_tool(thread_id, "get_order_details", args)
+                    metrics["tool_attempts"].append({"name": "get_order_details", "args": args,
+                                                     "code": result["code"], "message": result.get("message"),
+                                                     "attempt": attempt, "origin": "application"})
+                    if result["code"] != "TEMPORARY_FAILURE":
+                        break
+                metrics["tool_seconds"] += time.perf_counter() - start
+                metrics["tool_calls"] += attempt
+                metrics["retries"] += attempt - 1
+                if not result["ok"]:
+                    return {"status": "failed", "failure_reason": result["code"]}
+                reads = [result["data"]]
             if any(order["order_id"] == cancel_fallback and order["user_id"] == session["user_id"]
                    and order["status"] == "pending" for order in reads):
                 marker = {"cancel_fallback_order": cancel_fallback, "cancel_fallback_user": session["user_id"]}
@@ -306,9 +322,10 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                     )
                     return {"messages": [proposal_notice], "status": "needs_confirmation", "request": proposal}
                 return {"status": "failed", "failure_reason": staged["code"]}
-            prompt += (f"\nThe only next step is to call get_order_details for {cancel_fallback}, "
-                       "the unique order matching the customer's cancellation fallback. "
-                       "Make that native tool call now. Do not claim a cancellation or ask for identity again.")
+            if not cross_product:
+                return {"status": "failed", "failure_reason": "cancellation_target_not_verified"}
+            prompt += ("\nThe customer explicitly requested an item change, then a return, then cancellation. "
+                       f"Read the unique matching order {cancel_fallback} using get_order_details to verify eligibility.")
         if remaining_question and len(cancelled) == len(cancel_steps):
             prompt += (f"\nThe recorded cancellations are complete. Use verified reads to answer this remaining "
                        f"customer question: {remaining_question} Summarize the confirmed cancellations accurately.")
@@ -419,8 +436,6 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         offered = retail_tools_for_session(session) if config.get("state_tool_filter", False) else RETAIL_TOOLS
         if cancel_steps:
             offered = [tool for tool in offered if tool["function"]["name"] not in WRITE_TOOLS]
-        if cancel_fallback:
-            offered = [tool for tool in offered if tool["function"]["name"] == "get_order_details"]
         if focused_step:
             offered = [tool for tool in offered if tool["function"]["name"] not in WRITE_TOOLS
                        or tool["function"]["name"] == focused_step["tool"]]
@@ -567,14 +582,6 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             return {"messages": [response], "model_calls": state["model_calls"] + 1, "status": "answered"}
         if not response.tool_calls:
             review_budget = min(max_model_calls, config.get("episode_calls_remaining", max_model_calls))
-            if cancel_fallback:
-                if continuation_checked or state["model_calls"] + 1 >= review_budget:
-                    return {"messages": [response], "model_calls": state["model_calls"] + 1,
-                            "status": "failed", "failure_reason": "cancellation_target_not_verified"}
-                continuation_checked = True
-                feedback = SystemMessage(content=f"Call get_order_details for {cancel_fallback} before answering.")
-                persist(state, [response, feedback])
-                return {"messages": [response, feedback], "model_calls": state["model_calls"] + 1, "status": "repairing"}
             copy_read = bool(remaining_copy_step and isinstance(latest, ToolMessage)
                              and latest.name in {"get_order_details", "get_user_details"}
                              and latest.status == "success")
@@ -791,12 +798,6 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             status, request = "running", None
         elif name not in metrics["context_inputs"][-1]["tool_names"]:
             result = {"ok": False, "code": "INVALID_ARGUMENT", "message": "This tool was not offered in the current model request."}
-            status, request = "running", None
-        elif cancel_read_order and name == "get_order_details" and args.get("order_id") != cancel_read_order:
-            result = {"ok": False, "code": "INVALID_ARGUMENT",
-                      "message": f"Read order {cancel_read_order} to verify the requested fallback."}
-            metrics["tool_attempts"].append({"tool_call_id": call["id"], "name": name, "args": args,
-                                             "code": result["code"], "message": result["message"], "attempt": 1})
             status, request = "running", None
         elif name == "update_cancel_goal":
             customer_messages = [m.content for m in state["messages"] if isinstance(m, HumanMessage)]

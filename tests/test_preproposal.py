@@ -453,17 +453,20 @@ def test_cross_product_cancel_target_abstains_for_delivered_ambiguous_or_variant
     assert cross_product_cancel_target(text, business, user_id) is None
 
 
-def test_unavailable_variant_fallback_verifies_target_and_asks_for_reason(tmp_path):
+@pytest.mark.parametrize("temporary_failure", [False, True])
+def test_unavailable_variant_fallback_verifies_target_and_asks_for_reason(tmp_path, temporary_failure):
+    from retailflow.evaluation import FaultEnvironment
+
     wrong, target = "#W7999678", "#W8835847"
     email = "daiki.silva6295@example.com"
     agent, _, config = runtime(tmp_path, [
         call("ask_user", {"fields": ["identity"], "question": "What is your email?"}, "question"),
         call("find_user_id_by_email", {"email": email}, "identity"),
-        call("cancel_pending_order", {"order_id": wrong, "reason": "no longer needed"}, "wrong"),
-        call("get_order_details", {"order_id": wrong}, "wrong-read"),
-        call("get_order_details", {"order_id": target}, "verify"),
         AIMessage(content=f"Order {target} is pending."),
     ])
+    if temporary_failure:
+        agent.environment = FaultEnvironment(agent.environment.store_path, {"tool": "get_order_details"})
+        config["max_retry_per_call"] = 1
 
     async def run():
         thread = "variant-fallback"
@@ -475,8 +478,9 @@ def test_unavailable_variant_fallback_verifies_target_and_asks_for_reason(tmp_pa
         reason = await send(f"My email is {email}.")
         assert reason["status"] == "needs_input"
         assert reason["request"]["fields"] == ["cancel_reason"]
-        assert any(attempt["args"] == {"order_id": wrong} and attempt["code"] == "INVALID_ARGUMENT"
-                   for attempt in reason["usage"]["tool_attempts"])
+        reads = [attempt for attempt in reason["usage"]["tool_attempts"] if attempt["name"] == "get_order_details"]
+        assert all(attempt["args"] == {"order_id": target} and attempt["origin"] == "application" for attempt in reads)
+        assert [attempt["code"] for attempt in reads] == (["TEMPORARY_FAILURE", "OK"] if temporary_failure else ["OK"])
         assert agent.environment.pending_proposal(thread) is None
         proposal = await send("I ordered it by mistake.")
         assert proposal["status"] == "needs_confirmation"
@@ -498,8 +502,6 @@ def test_two_fallbacks_have_separate_previews_and_preserve_remaining_questions(t
     agent, _, config = runtime(tmp_path, [
         call("ask_user", {"fields": ["identity"], "question": "What is your name and ZIP?"}, "question"),
         call("find_user_id_by_name_zip", {"first_name": "Ava", "last_name": "Nguyen", "zip": "94128"}, "identity"),
-        call("get_order_details", {"order_id": jacket}, "jacket"),
-        call("get_order_details", {"order_id": skateboard}, "skateboard"),
         call("get_order_details", {"order_id": "#W8668939"}, "grills"),
         AIMessage(content=f"Canceled order {jacket} and canceled order {skateboard}. Total paid for grills: $1939.05."),
     ])
