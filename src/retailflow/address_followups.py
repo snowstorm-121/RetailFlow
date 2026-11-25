@@ -17,6 +17,8 @@ def advisory_opening(customer_messages):
         r"zip code is \d{5})\.?(?: I don't remember; please look through my orders\.)?|"
         rf"You are [\w-]+ and {email}(?: and {email})*\.?(?: {lookup})?|"
         rf"{lookup}|"
+        r"You are [\w' -]+\. You live in [\w -]+, [A-Z]{2} \d{5}\.?|"
+        r"I no longer need (?:it|the order)\.?|I ordered (?:it|the order) by mistake\.?|"
         r"\d{5}\.?|"
         r"ordered by mistake\.?|no longer needed\.?|"
         r"Use my (?:credit card|original payment method)\.)", re.I,

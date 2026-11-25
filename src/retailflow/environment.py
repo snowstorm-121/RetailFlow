@@ -133,6 +133,10 @@ class RetailEnvironment:
         """Preview and stage an account address change without executing a pending write."""
         return self._dispatch_tool(thread_id, "modify_user_address", args, proposal_only=True)
 
+    def stage_cancellation(self, thread_id: str, args: dict) -> dict:
+        """Preview a cancellation without executing a pending write."""
+        return self._dispatch_tool(thread_id, "cancel_pending_order", args, proposal_only=True)
+
     def dispatch_tool(self, thread_id: str, name: str, args: dict) -> dict:
         return self._dispatch_tool(thread_id, name, args)
 

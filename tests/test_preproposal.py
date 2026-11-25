@@ -1,6 +1,8 @@
 import asyncio
 import json
 
+import pytest
+
 from langchain_core.messages import AIMessage, ToolMessage
 
 from test_agent_loop import call, runtime
@@ -375,3 +377,67 @@ def test_read_retry_does_not_consume_the_structured_clarification_retry(tmp_path
         f"My email is {email}. Modify the 17-inch laptop to 13-inch."}, config))
     assert result["status"] == "needs_input"
     assert result["request"]["fields"] == ["payment_method"]
+
+
+@pytest.mark.parametrize("keep_order", [False, True])
+def test_cross_product_fallback_uses_the_cancel_reason_and_a_separate_confirmation(tmp_path, keep_order):
+    order_id = "#W3361211"
+    agent, _, config = runtime(tmp_path, [
+        call("ask_user", {"fields": ["identity"], "question": "What is your name and ZIP?"}, "identity-question"),
+        call("find_user_id_by_name_zip", {"first_name": "Aarav", "last_name": "Lee", "zip": "85025"}, "identity"),
+        call("get_order_details", {"order_id": order_id}, "order"),
+        AIMessage(content="I will keep the order." if keep_order else f"Order {order_id} was canceled."),
+    ])
+
+    async def run():
+        thread = "product-fallback"
+        opening = "Change my luggage set to a coat. If that cannot be done, return that item; if that is also impossible, cancel the whole order."
+        first = await agent.run_turn(thread, {"kind": "message", "text": opening}, config)
+        assert first["request"]["fields"] == ["identity"]
+        reason = await agent.run_turn(thread, {"kind": "message", "text":
+            "You are Aarav Lee. You live in Phoenix, AZ 85025."}, config)
+        assert reason["status"] == "needs_input"
+        assert reason["request"]["fields"] == ["cancel_reason"]
+        assert agent.environment.pending_proposal(thread) is None
+
+        proposal = await agent.run_turn(thread, {"kind": "message",
+                                                "text": "Keep it." if keep_order else "I no longer need it."}, config)
+        if keep_order:
+            assert proposal["status"] == "answered"
+            assert agent.environment.pending_proposal(thread) is None
+            assert agent.environment.get_order(thread, order_id)["status"] == "pending"
+            return
+        assert proposal["status"] == "needs_confirmation"
+        assert proposal["request"]["name"] == "cancel_pending_order"
+        assert proposal["request"]["args"] == {"order_id": order_id, "reason": "no longer needed"}
+        assert agent.environment.get_order(thread, order_id)["status"] == "pending"
+        assert agent.environment.receipt_for_proposal(thread, proposal["request"]["proposal_id"]) is None
+
+        final = await agent.run_turn(thread, {"kind": "confirmation", "accepted": True,
+                                             "proposal_id": proposal["request"]["proposal_id"]}, config)
+        assert final["status"] == "answered"
+        assert agent.environment.get_order(thread, order_id)["status"] == "cancelled"
+        assert agent.environment.get_order(thread, "#W3586556")["status"] == "pending"
+
+    asyncio.run(run())
+
+
+def test_cross_product_cancel_target_abstains_for_delivered_ambiguous_or_variant_requests():
+    from retailflow.preproposal import cross_product_cancel_target
+    from retailflow.upstream.paths import RETAIL_DB_PATH
+
+    business = json.loads(RETAIL_DB_PATH.read_text())
+    user_id, order_id = "aarav_lee_1982", "#W3361211"
+    chain = ". If that cannot be done, return that item; if that is also impossible, cancel the whole order."
+    text = "Change my luggage set to a coat" + chain
+    assert cross_product_cancel_target(text, business, user_id) == order_id
+    assert cross_product_cancel_target("Change my luggage set to a blue one" + chain, business, user_id) is None
+    assert cross_product_cancel_target(text, business, "yara_muller_8652") == "#W5995614"
+    business["users"]["yara_muller_8652"]["orders"] = [order_id]
+    assert cross_product_cancel_target(text, business, "yara_muller_8652") is None
+    business["orders"][order_id]["status"] = "delivered"
+    assert cross_product_cancel_target(text, business, user_id) is None
+    business["orders"][order_id]["status"] = "pending"
+    business["orders"]["#W1"] = {**business["orders"][order_id], "order_id": "#W1"}
+    business["users"][user_id]["orders"].append("#W1")
+    assert cross_product_cancel_target(text, business, user_id) is None

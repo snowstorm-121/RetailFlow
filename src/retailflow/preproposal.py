@@ -78,6 +78,38 @@ def address_copy_target(text, business, user_id):
             "address": source["address"], "update_default": bool(copy[2])}
 
 
+def cross_product_cancel_target(text, business, user_id):
+    """Resolve a uniquely named pending item in an explicit change, return, cancel chain."""
+    request = re.fullmatch(
+        r"\s*(?:please )?(?:change|replace|switch) my ([a-z -]+?) (?:to|with) an? ([a-z -]+?)\.\s*"
+        r"if that (?:cannot be done|is impossible), return (?:that|the) item[.;]\s*"
+        r"if that is also impossible, cancel the (?:whole|entire) order[.!]?", text, re.I,
+    )
+    if not request or not user_id:
+        return None
+    source, replacement = (value.lower() for value in request.groups())
+    names = {product["name"].lower() for product in business["products"].values()}
+    # Recognize explicit garment types even if the retail catalog has no entry for them.
+    if replacement not in names | {"coat", "jacket", "shirt", "sweater", "dress"}:
+        return None
+    if replacement in source.split() or source == replacement:
+        return None
+    orders = business["orders"]
+    matches = [(order_id, item) for order_id in business["users"][user_id]["orders"]
+               if orders[order_id]["user_id"] == user_id
+               for item in orders[order_id]["items"] if item["name"].lower() == source]
+    if len(matches) != 1:
+        return None
+    order_id, item = matches[0]
+    if orders[order_id]["status"] != "pending":
+        return None
+    variants = business["products"][item["product_id"]]["variants"]
+    if any(replacement in {str(value).lower() for value in variant["options"].values()}
+           for variant in variants.values()):
+        return None
+    return order_id
+
+
 def item_order_excluded(text, order_id):
     """Check an explicit order exclusion even when the alternative cannot be identified."""
     return (

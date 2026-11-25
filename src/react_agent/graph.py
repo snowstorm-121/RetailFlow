@@ -162,7 +162,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
     """Build the retail loop around the template's model → tool → model pattern."""
 
     from retailflow.context import ContextBudgetExceeded, build_model_context
-    from retailflow.preproposal import (address_copy_target, address_order_candidates, false_cancellation_claim,
+    from retailflow.preproposal import (address_copy_target, address_order_candidates, cross_product_cancel_target,
+                                        false_cancellation_claim,
                                         item_change_targets, item_order_excluded, preserved_variant_conflicts,
                                         requested_variants, wrong_item_target)
     from retailflow.address_followups import (advisory_opening, explicit_address_steps, matching_variants,
@@ -243,6 +244,53 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         outcomes = [message for message in active_messages
                     if message.additional_kwargs.get("application_result")]
         opening = request_text(active_messages)
+        cancel_fallback = None if goal_state is not None else cross_product_cancel_target(
+            opening, session["business"], session["user_id"])
+        if cancel_fallback:
+            reads = [json.loads(message.content)["data"] for message in active_messages
+                     if isinstance(message, ToolMessage) and message.name == "get_order_details"
+                     and message.status == "success"]
+            if any(order["order_id"] == cancel_fallback and order["user_id"] == session["user_id"]
+                   and order["status"] == "pending" for order in reads):
+                marker = {"cancel_fallback_order": cancel_fallback, "cancel_fallback_user": session["user_id"]}
+                reason = None
+                if any(all(message.additional_kwargs.get(key) == value for key, value in marker.items())
+                       for message in active_messages):
+                    latest_user = next(message.content for message in reversed(active_messages)
+                                       if isinstance(message, HumanMessage))
+                    if isinstance(latest_user, str):
+                        value = latest_user.strip().lower().rstrip(".")
+                        reason = {
+                            "no longer needed": "no longer needed", "i no longer need it": "no longer needed",
+                            "i no longer need the order": "no longer needed", "ordered by mistake": "ordered by mistake",
+                            "i ordered it by mistake": "ordered by mistake",
+                            "i ordered the order by mistake": "ordered by mistake",
+                        }.get(value)
+                if not reason:
+                    question = (f"Order {cancel_fallback} is pending. I can only change variants of the same product, "
+                                "and only delivered orders can be returned. For the cancellation you requested as a "
+                                "fallback, what is the reason: ordered by mistake or no longer needed?")
+                    clarification = AIMessage(content=question, additional_kwargs=marker)
+                    return {"messages": [clarification], "status": "needs_input",
+                            "request": {"fields": ["cancel_reason"], "question": question}}
+                args = {"order_id": cancel_fallback, "reason": reason}
+                start = time.perf_counter()
+                staged = environment.stage_cancellation(thread_id, args)
+                metrics["tool_seconds"] += time.perf_counter() - start
+                metrics["tool_calls"] += 1
+                metrics["tool_attempts"].append({"name": "cancel_pending_order", "args": args,
+                                                 "code": staged["code"], "message": staged.get("message"),
+                                                 "attempt": 1, "origin": "application"})
+                if staged["code"] == "CONFIRMATION_REQUIRED":
+                    proposal = staged["proposal"]
+                    proposal_notice = SystemMessage(
+                        content=f"Application staged cancellation proposal {proposal['proposal_id']}. Separate confirmation is required.",
+                        additional_kwargs={"application_proposal": True},
+                    )
+                    return {"messages": [proposal_notice], "status": "needs_confirmation", "request": proposal}
+                return {"status": "failed", "failure_reason": staged["code"]}
+            prompt += (f"\nThe customer explicitly requested an item change, then a return, then cancellation. "
+                       f"Read the unique matching order {cancel_fallback} using get_order_details to verify eligibility.")
         copy = address_copy_evidence(active_messages, opening, session)
         address_request = address_request or copy is not None
         remaining_copy_step = None
@@ -349,6 +397,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                             json.loads(latest.content).get("code") == "MISSING_USER_INFORMATION")
         information_repair = repair and latest.additional_kwargs["protocol_feedback"] == "information"
         offered = retail_tools_for_session(session) if config.get("state_tool_filter", False) else RETAIL_TOOLS
+        if cancel_fallback:
+            offered = [tool for tool in offered if tool["function"]["name"] not in WRITE_TOOLS]
         if focused_step:
             offered = [tool for tool in offered if tool["function"]["name"] not in WRITE_TOOLS
                        or tool["function"]["name"] == focused_step["tool"]]
