@@ -387,6 +387,28 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                          "Use only available catalog variant IDs. Any catalog option hits are partial evidence: verify "
                          "all requested preferences before selecting. Never invent an ID or repeat committed steps.")
         item_targets = item_change_targets(opening, session["business"], session["user_id"])
+        dependent_choice = re.search(r"\b(?:if (?:you can )?only (?:do )?one|whichever|"
+                                     r"(?:choose|pick) the (?:one|option) that (?:saves|costs))\b", opening, re.I)
+        continue_item_change = False
+        if (focused_step is None and config.get("confirmed_this_turn") and len(item_targets) == 1 and outcomes
+                and not dependent_choice and outcomes[-1].additional_kwargs.get("committed_tool") == "return_delivered_order_items"
+                and re.search(r"(?:^|[.!?]\s+)(?:please )?(?:modify|change|switch) "
+                              r"[^.!?]+ in (?:another|the other) order to [^.!?]+"
+                              r"(?:\.\s+If the exact version is unavailable, list all available "
+                              r"[\w -]+ options(?:; I prefer [\w -]+)?)?\.?\s*$", opening, re.I)):
+            target = item_targets[0]
+            returned = json.loads(outcomes[-1].content.removeprefix("Application outcome: "))
+            if (target["order_id"] != returned["order_id"] and returned["user_id"] == session["user_id"]
+                    and not re.search(r"\b(?:if|unless|until|before|after|provided|only when)\b",
+                                      target["requested_variant"], re.I)):
+                continue_item_change = True
+                focused_step = {"tool": "modify_pending_order_items", "order_id": target["order_id"],
+                                "item_id": target["item_id"], "product_id": target["product_id"],
+                                "requested_variant": target["requested_variant"]}
+                prompt += ("\nThe return is already confirmed. The customer separately requested a change in "
+                           "another order. Read its order and catalog as needed, then propose the item change "
+                           "or request a missing preference using a native tool. Verified target: "
+                           + json.dumps(focused_step, ensure_ascii=False))
         if item_targets:
             prompt += ("\nUse item_change_targets from authenticated reads to distinguish the original item_ids "
                        "from the new_item_ids selected from that product's available variants. "
@@ -425,7 +447,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             visible = build_model_context({**session, "messages": context_messages},
                                           {"context_budget_tokens": budget, "structured_context": config.get("structured_context", True),
                                            "required_outcome_ids": {message.id for message in outcomes}
-                                           if address_request or remaining_question else set()})
+                                           if address_request or remaining_question or continue_item_change else set()})
         except ContextBudgetExceeded:
             return {"status": "budget_exceeded", "failure_reason": "context_budget"}
         latest = state["messages"][-1]
@@ -588,7 +610,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             if copy_read and latest.name == "get_order_details":
                 read_order = json.loads(latest.content)["data"]["order_id"]
                 copy_read = read_order in {copy["source_order_id"], copy["destination_order_id"]}
-            if ((copy_read or (focused_step and state["model_calls"] == 0))
+            if ((copy_read or continue_item_change or (focused_step and state["model_calls"] == 0))
                     and not continuation_checked and state["model_calls"] + 1 < review_budget
                     and not _requests_information(response.content) and not _is_text_tool_action(response.content)):
                 continuation_checked = True
@@ -637,7 +659,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             return_confirmation = bool(
                 isinstance(text, str) and session.get("user_id") and return_clause and len(return_order_ids) <= 1
                 and not re.search(r"\b(?:if|unless|until|before|after|provided|only when)\b", return_clause[1], re.I)
-                and not re.search(r"\b(?:if only one|whichever (?:saves|costs))\b", opening, re.I)
+                and not dependent_choice
                 and not re.match(r"[.!?]\s+(?:(?:only|do (?:this|that|it) only)\b)",
                                  opening[return_clause.end():], re.I)
                 and re.search(r"\bconfirm (?:if|whether) you (?:want|wish|would like) to "
@@ -790,7 +812,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         reused_read = False
         focused_key = "user_id" if focused_step and "user_id" in focused_step else "order_id"
         focused_mismatch = bool(focused_step and name in WRITE_TOOLS and
-                                (name, args.get(focused_key)) != (focused_step["tool"], focused_step[focused_key]))
+                                ((name, args.get(focused_key)) != (focused_step["tool"], focused_step[focused_key])
+                                 or ("item_id" in focused_step and args.get("item_ids") != [focused_step["item_id"]])))
         if focused_mismatch:
             result = {"ok": False, "code": "INVALID_ARGUMENT",
                       "message": f"The next explicit step is {focused_step['tool']} for {focused_step[focused_key]}. "

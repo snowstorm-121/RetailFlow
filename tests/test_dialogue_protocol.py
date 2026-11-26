@@ -608,6 +608,8 @@ def test_mixed_confirmation_draft_recovers_ready_return_before_laptop_choice(tmp
     "Return the speaker from #W9672333, not #W8528674.",
     "Return the speaker. Only do that if you can modify my laptop.",
     "Return the speaker and exchange the headphones. If only one option is possible, choose whichever saves more.",
+    "Return the speaker and exchange the headphones. Choose whichever is cheaper.",
+    "Return the speaker and exchange the headphones. Pick the one that saves the most.",
     "Return the laptop. Check the speaker in #W8528674 too.",
 ])
 def test_return_confirmation_repair_requires_independent_eligible_scope(tmp_path, request_text):
@@ -675,5 +677,56 @@ def test_mixed_write_reply_uses_actual_replacement_and_both_receipts(tmp_path, r
 
         next_request = await worker.run_turn(thread, {"kind": "message", "text": "I have a new question."}, config)
         assert next_request["text"] == "How can I help with your new question?"
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("condition", ["", " Only do that if there is no price difference."])
+def test_confirmed_return_continues_to_independent_pending_item_change(tmp_path, condition):
+    email = "aarav.santos8320@example.com"
+    speaker_order, laptop_order = "#W8528674", "#W9672333"
+    returned = {"order_id": speaker_order, "item_ids": ["6704763132"], "payment_method_id": "paypal_7664977"}
+    modified = {"order_id": laptop_order, "item_ids": ["1684786391"], "new_item_ids": ["5052031638"],
+                "payment_method_id": "paypal_7664977"}
+    worker, _, config = runtime(tmp_path, [
+        call("find_user_id_by_email", {"email": email}, "identity"),
+        call("get_order_details", {"order_id": speaker_order}, "speaker"),
+        call("return_delivered_order_items", returned, "return"),
+        AIMessage(content="The speaker return is complete."),
+        call("get_order_details", {"order_id": laptop_order}, "laptop"),
+        call("modify_pending_order_items", {**modified, "item_ids": ["3714494375"]}, "wrong-item"),
+        call("modify_pending_order_items", modified, "modify"),
+        AIMessage(content="Both confirmed actions are recorded."),
+    ], return_receipt_response=True)
+
+    async def run():
+        thread = "mixed-continuation"
+        first = await worker.run_turn(thread, {"kind": "message", "text":
+            f"My email is {email}. Return the more expensive speaker that is not water resistant. "
+            "Modify the 17-inch laptop in another order to 13-inch." + condition}, config)
+        assert first["status"] == "needs_confirmation"
+        second = await worker.run_turn(thread, {"kind": "confirmation", "accepted": True,
+                                               "proposal_id": first["request"]["proposal_id"]}, config)
+        if condition:
+            assert second["status"] == "answered"
+            assert worker.environment.pending_proposal(thread) is None
+            assert worker.environment.get_order(thread, laptop_order)["status"] == "pending"
+            return
+        assert second["status"] == "needs_confirmation"
+        assert second["request"]["args"] == modified
+        assert second["usage"]["focused_prose_repairs"] == 1
+        wrong_item = next(message for message in worker.load_messages(thread)
+                          if isinstance(message, ToolMessage) and message.tool_call_id == "wrong-item")
+        assert wrong_item.additional_kwargs["focused_write_mismatch"] and wrong_item.status == "error"
+        proposal_id = second["request"]["proposal_id"]
+        assert first["request"]["proposal_id"] != proposal_id
+        assert worker.environment.get_order(thread, speaker_order)["status"] == "return requested"
+        assert worker.environment.get_order(thread, laptop_order)["status"] == "pending"
+        assert worker.environment.receipt_for_proposal(thread, proposal_id) is None
+        final = await worker.run_turn(thread, {"kind": "confirmation", "accepted": True,
+                                              "proposal_id": proposal_id}, config)
+        assert final["status"] == "answered"
+        assert "Item modification confirmed" in final["text"]
+        assert worker.environment.get_order(thread, laptop_order)["status"] == "pending (item modified)"
 
     asyncio.run(run())
