@@ -626,3 +626,6 @@ def test_product_order_candidates_keep_ambiguity_and_explicit_references_separat
     identity = "You are Aarav Anderson, residing in Philadelphia 19031. I don't remember; please look through my orders."
     assert inventory_order_request([request, identity]) == (request, True)
     assert inventory_order_request([request, identity, "Actually, leave the earbuds alone."]) == ("", True)
+    zip_and_lookup = "You are Yusuf Rossi in zipcode 19122. I don't remember; please look through my orders."
+    assert inventory_order_request(["Find my T-shirts.", zip_and_lookup]) == ("Find my T-shirts.", True)
+    assert inventory_order_request([request, "Leave the earbuds alone. Please look through my orders."]) == ("", True)

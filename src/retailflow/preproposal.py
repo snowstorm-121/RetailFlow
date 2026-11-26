@@ -17,11 +17,12 @@ def inventory_order_request(customer_messages):
     followups = []
     delegated = False
     for text in customer_messages[1:]:
-        if re.fullmatch(lookup, text.strip(), re.I):
+        text = text.strip()
+        requested_lookup = re.search(rf"(?:^|(?<=[.!?])\s+)(?:{lookup})$", text, re.I)
+        if requested_lookup:
             delegated = True
-        elif match := re.fullmatch(rf"(?:{identity})(?: (?P<lookup>{lookup}))?", text.strip(), re.I):
-            delegated = delegated or bool(match["lookup"])
-        else:
+            text = text[:requested_lookup.start()].strip()
+        if text and not re.fullmatch(identity, text, re.I):
             followups.append(text)
     return advisory_opening([customer_messages[0], *followups]), delegated
 
