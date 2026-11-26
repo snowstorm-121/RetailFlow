@@ -637,10 +637,12 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             return_confirmation = bool(
                 isinstance(text, str) and session.get("user_id") and return_clause and len(return_order_ids) <= 1
                 and not re.search(r"\b(?:if|unless|until|before|after|provided|only when)\b", return_clause[1], re.I)
+                and not re.search(r"\b(?:if only one|whichever (?:saves|costs))\b", opening, re.I)
                 and not re.match(r"[.!?]\s+(?:(?:only|do (?:this|that|it) only)\b)",
                                  opening[return_clause.end():], re.I)
                 and re.search(r"\bconfirm (?:if|whether) you (?:want|wish|would like) to "
-                              r"(?:proceed with returning|return)\b", text, re.I)
+                              r"(?:proceed with returning|return)\b"
+                              r"|\bconfirm\s*:\s*\n[ \t>*_+\-✅]*return\b", text, re.I)
                 and any(isinstance(message, ToolMessage) and message.name == "get_order_details"
                         and message.status == "success"
                         and (order := json.loads(message.content)["data"])["status"] == "delivered"

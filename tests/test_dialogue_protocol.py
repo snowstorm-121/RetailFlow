@@ -557,13 +557,17 @@ def test_proposal_recovery_survives_intermediate_read(tmp_path, native_finish):
     assert worker.environment.get_order('a', '#W5056519')['status'] == 'pending'
 
 
-def test_mixed_confirmation_draft_recovers_ready_return_before_laptop_choice(tmp_path):
+@pytest.mark.parametrize("draft", [
+    "1. **Confirm which 13-inch laptop variant you prefer**.\n"
+    "2. **Confirm if you want to proceed with returning the non-water-resistant speaker**.\n"
+    "Once you confirm both, I will generate the proposals.",
+    "Please confirm:\n- ✅ Return the non-water-resistant speaker\n"
+    "- 🔍 Choose which item variant you prefer for the laptop.",
+])
+def test_mixed_confirmation_draft_recovers_ready_return_before_laptop_choice(tmp_path, draft):
     email = "aarav.santos8320@example.com"
     speaker_order, laptop_order = "#W8528674", "#W9672333"
     args = {"order_id": speaker_order, "item_ids": ["6704763132"], "payment_method_id": "paypal_7664977"}
-    draft = ("1. **Confirm which 13-inch laptop variant you prefer**.\n"
-             "2. **Confirm if you want to proceed with returning the non-water-resistant speaker**.\n"
-             "Once you confirm both, I will generate the proposals.")
     worker, model, config = runtime(tmp_path, [
         call("find_user_id_by_email", {"email": email}, "identity"),
         call("get_order_details", {"order_id": laptop_order}, "laptop"),
@@ -603,6 +607,7 @@ def test_mixed_confirmation_draft_recovers_ready_return_before_laptop_choice(tmp
     "Return the speaker only if you can modify my laptop to 13 inches.",
     "Return the speaker from #W9672333, not #W8528674.",
     "Return the speaker. Only do that if you can modify my laptop.",
+    "Return the speaker and exchange the headphones. If only one option is possible, choose whichever saves more.",
     "Return the laptop. Check the speaker in #W8528674 too.",
 ])
 def test_return_confirmation_repair_requires_independent_eligible_scope(tmp_path, request_text):
