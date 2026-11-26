@@ -705,10 +705,12 @@ def test_confirmed_return_continues_to_independent_pending_item_change(tmp_path,
         call("return_delivered_order_items", returned, "return"),
         AIMessage(content="The speaker return is complete."),
         call("get_order_details", {"order_id": laptop_order}, "laptop"),
+        call("modify_pending_order_items", modified, "premature"),
+        call("get_product_details", {"product_id": "4760268021"}, "catalog"),
         call("modify_pending_order_items", {**modified, "item_ids": ["3714494375"]}, "wrong-item"),
         call("modify_pending_order_items", modified, "modify"),
         AIMessage(content="Both confirmed actions are recorded."),
-    ], return_receipt_response=True)
+    ], return_receipt_response=True, max_model_calls_per_turn=8)
 
     async def run():
         thread = "mixed-continuation"
@@ -726,6 +728,9 @@ def test_confirmed_return_continues_to_independent_pending_item_change(tmp_path,
         assert second["status"] == "needs_confirmation"
         assert second["request"]["args"] == modified
         assert second["usage"]["focused_prose_repairs"] == 1
+        premature = next(message for message in worker.load_messages(thread)
+                         if isinstance(message, ToolMessage) and message.tool_call_id == "premature")
+        assert "Read the current catalog" in json.loads(premature.content)["message"]
         wrong_item = next(message for message in worker.load_messages(thread)
                           if isinstance(message, ToolMessage) and message.tool_call_id == "wrong-item")
         assert wrong_item.additional_kwargs["focused_write_mismatch"] and wrong_item.status == "error"

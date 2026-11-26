@@ -404,16 +404,18 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 continue_item_change = True
                 focused_step = {"tool": "modify_pending_order_items", "order_id": target["order_id"],
                                 "item_id": target["item_id"], "product_id": target["product_id"],
-                                "requested_variant": target["requested_variant"]}
+                                "requested_variant": target["requested_variant"], "catalog_lookup_required": True}
                 catalog_id = target["product_id"]
                 for message in reversed(active_messages):
                     if not isinstance(message, ToolMessage) or message.name != "get_product_details" or message.status != "success":
                         continue
                     catalog = json.loads(message.content)["data"]
                     if catalog["product_id"] == catalog_id:
-                        preferred = catalog.get("preferred_available_option_hits")
-                        if preferred and catalog["variants"] == session["business"]["products"][catalog_id]["variants"]:
-                            focused_step["preferred_available_option_hits"] = preferred
+                        if catalog["variants"] == session["business"]["products"][catalog_id]["variants"]:
+                            focused_step["catalog_lookup_required"] = False
+                            preferred = catalog.get("preferred_available_option_hits")
+                            if preferred:
+                                focused_step["preferred_available_option_hits"] = preferred
                         break
                 prompt += ("\nThe return is already confirmed. The customer separately requested a change in "
                            "another order. Read its order and catalog as needed, then propose the item change "
@@ -421,6 +423,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                            + json.dumps(focused_step, ensure_ascii=False))
                 if "preferred_available_option_hits" in focused_step:
                     prompt += " Use the verified preferred candidates if they satisfy the customer's other requirements."
+                if focused_step["catalog_lookup_required"]:
+                    prompt += f" First call get_product_details for {catalog_id} to verify a current replacement."
         if item_targets:
             prompt += ("\nUse item_change_targets from authenticated reads to distinguish the original item_ids "
                        "from the new_item_ids selected from that product's available variants. "
@@ -475,7 +479,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             offered = [tool for tool in offered if tool["function"]["name"] not in WRITE_TOOLS]
         if focused_step:
             offered = [tool for tool in offered if tool["function"]["name"] not in WRITE_TOOLS
-                       or tool["function"]["name"] == focused_step["tool"]]
+                       or (not focused_step.get("catalog_lookup_required")
+                           and tool["function"]["name"] == focused_step["tool"])]
         if focused_prose:
             scope_tools = {focused_step["tool"], "get_user_details", "get_order_details", "get_product_details", "ask_user"}
             offered = [tool for tool in offered if tool["function"]["name"] in scope_tools]
@@ -510,6 +515,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                       "Only committed_outcomes were confirmed. The next step is unconfirmed. "
                       "Use verified reads to propose it, or call a read tool or ask_user if a prerequisite is missing. "
                       "If the operation is ineligible, explain why. Never claim a write without its own receipt.")
+            if focused_step.get("catalog_lookup_required"):
+                prompt += " First read next_step.product_id using get_product_details."
             customer_texts = [message.content for message in active_messages
                               if isinstance(message, HumanMessage) and isinstance(message.content, str)
                               and message.content != "I explicitly confirm the displayed proposal."]
@@ -835,6 +842,10 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                                  "This rejected call did not undo any confirmed action. Read or clarify the target if needed."}
             metrics["tool_attempts"].append({"tool_call_id": call["id"], "name": name, "args": args,
                                              "code": result["code"], "message": result["message"], "attempt": 1})
+            status, request = "running", None
+        elif focused_step and focused_step.get("catalog_lookup_required") and name == focused_step["tool"]:
+            result = {"ok": False, "code": "INVALID_ARGUMENT",
+                      "message": f"Read the current catalog for product {focused_step['product_id']} before proposing a change."}
             status, request = "running", None
         elif name not in metrics["context_inputs"][-1]["tool_names"]:
             result = {"ok": False, "code": "INVALID_ARGUMENT", "message": "This tool was not offered in the current model request."}

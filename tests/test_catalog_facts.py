@@ -147,3 +147,45 @@ def test_catalog_cheapest_summary_excludes_unavailable_and_retains_ties(tmp_path
     read = next(m for m in model.inputs[-1] if isinstance(m, ToolMessage) and m.tool_call_id == "catalog")
     cheapest = json.loads(read.content)["data"]["cheapest_available_variants"]
     assert {(variant["item_id"], variant["price"]) for variant in cheapest} == {("blue", 8), ("black", 8)}
+
+
+@pytest.mark.parametrize("exchange_saves_more", [False, True])
+def test_confirmed_return_reports_both_verified_savings_after_identity_clarification(tmp_path, exchange_saves_more):
+    worker, _, config = runtime(tmp_path, [
+        call("ask_user", {"fields": ["identity"], "question": "What is your name and ZIP?"}, "question"),
+        call("find_user_id_by_name_zip", {"first_name": "Mei", "last_name": "Davis", "zip": "80217"}, "identity"),
+        call("get_order_details", {"order_id": "#W2890441"}, "order"),
+        call("get_product_details", {"product_id": "2747247837"}, "bed"),
+        call("get_product_details", {"product_id": "4794339885"}, "chair"),
+        call("return_delivered_order_items", {"order_id": "#W2890441", "item_ids": ["2366567022"],
+                                             "payment_method_id": "credit_card_1061405"}, "return"),
+        AIMessage(content="The return was requested. Exchange savings would be $38.32."),
+    ], return_receipt_response=True)
+
+    async def run():
+        thread = "savings"
+        if exchange_saves_more:
+            worker.environment.create_session(thread, config["initial_state_ref"])
+            business = worker.environment.load_session(thread)["business"]
+            business["products"]["2747247837"]["variants"]["6942241102"]["price"] = 120.93
+            with worker.environment.storage.transaction() as db:
+                db.execute("UPDATE sessions SET business_json = ? WHERE thread = ?", (json.dumps(business), thread))
+        await worker.run_turn(thread, {"kind": "message", "text":
+            "Return my water bottle and exchange my pet bed and office chair to their cheapest versions. "
+            "I want both; if only one option is possible, choose whichever saves more money and tell me the savings for both."},
+            config)
+        proposal = await worker.run_turn(thread, {"kind": "message", "text": "You are Mei Davis in zipcode 80217."}, config)
+        assert proposal["status"] == "needs_confirmation"
+        bed = next(m for m in worker.load_messages(thread) if isinstance(m, ToolMessage) and m.tool_call_id == "bed")
+        cheapest = json.loads(bed.content)["data"]["cheapest_available_variants"][0]["price"]
+        assert cheapest == (120.93 if exchange_saves_more else 180.93)
+        result = await worker.run_turn(thread, {"kind": "confirmation", "accepted": True,
+                                               "proposal_id": proposal["request"]["proposal_id"]}, config)
+        assert result["status"] == "answered"
+        assert "$54.04" in result["text"]
+        assert ("$101.64" if exchange_saves_more else "$41.64") in result["text"]
+        assert ("Exchanging would have saved more" if exchange_saves_more else "The return saves more") in result["text"]
+        assert "No exchange was requested" in result["text"]
+        assert "$38.32" not in result["text"]
+
+    asyncio.run(run())

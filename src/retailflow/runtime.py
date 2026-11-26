@@ -18,7 +18,7 @@ from react_agent.context import Context
 from react_agent.graph import make_retail_graph
 from react_agent.utils import load_chat_model
 from retailflow.environment import RetailEnvironment
-from retailflow.receipts import mixed_item_receipt_reply
+from retailflow.receipts import mixed_item_receipt_reply, return_exchange_savings_reply
 from retailflow.cancel_goals import is_explicit_all_pending_request
 from retailflow.upstream.paths import RETAIL_DB_PATH
 
@@ -277,6 +277,7 @@ class RetailRuntime:
             if remaining:
                 text += f"Remaining items were not returned and are not eligible for another return in this order: {remaining}. "
             text += "The policy expects return instructions by email; this local application sends no real email."
+            text += return_exchange_savings_reply(messages, order, products)
             if config.get("catalog_availability_facts", False):
                 products = {}
                 for message in messages:
