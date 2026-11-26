@@ -165,7 +165,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
     from retailflow.preproposal import (address_copy_target, address_order_candidates, cross_product_cancel_target,
                                         false_cancellation_claim, item_cancel_fallbacks,
                                         item_change_targets, item_order_excluded, preserved_variant_conflicts,
-                                        requested_variants, wrong_item_target)
+                                        preferred_variant_matches, requested_variants, wrong_item_target)
     from retailflow.address_followups import (advisory_opening, explicit_address_steps, matching_variants,
                                               processing_guarantee_fact, verified_address_reply)
     from retailflow.cancel_goals import GOAL_TOOL, GOAL_PROMPT, validate_goal, goal_progress
@@ -405,14 +405,29 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 focused_step = {"tool": "modify_pending_order_items", "order_id": target["order_id"],
                                 "item_id": target["item_id"], "product_id": target["product_id"],
                                 "requested_variant": target["requested_variant"]}
+                catalog_id = target["product_id"]
+                for message in reversed(active_messages):
+                    if not isinstance(message, ToolMessage) or message.name != "get_product_details" or message.status != "success":
+                        continue
+                    catalog = json.loads(message.content)["data"]
+                    if catalog["product_id"] == catalog_id:
+                        preferred = catalog.get("preferred_available_option_hits")
+                        if preferred and catalog["variants"] == session["business"]["products"][catalog_id]["variants"]:
+                            focused_step["preferred_available_option_hits"] = preferred
+                        break
                 prompt += ("\nThe return is already confirmed. The customer separately requested a change in "
                            "another order. Read its order and catalog as needed, then propose the item change "
                            "or request a missing preference using a native tool. Verified target: "
                            + json.dumps(focused_step, ensure_ascii=False))
+                if "preferred_available_option_hits" in focused_step:
+                    prompt += " Use the verified preferred candidates if they satisfy the customer's other requirements."
         if item_targets:
             prompt += ("\nUse item_change_targets from authenticated reads to distinguish the original item_ids "
                        "from the new_item_ids selected from that product's available variants. "
                        "Read the selected order and product before proposing.")
+        if re.search(r"\bcheapest\b", opening, re.I):
+            prompt += ("\nThe catalog's cheapest_available_variants field is the overall minimum. Apply any customer "
+                       "filters before comparing a candidate price to the actual order item price.")
         if re.search(r"\baddress\b", opening, re.I):
             prompt += ("\nIf the authenticated profile shows address_order_candidates, read the matching order before "
                        "drawing conclusions. Verify the city and requested item in that order. Address candidates are "
@@ -1009,6 +1024,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                     result["data"]["item_change_targets"] = targets
             else:
                 product = result["data"]
+                if re.search(r"\bcheapest\b", opening, re.I):
+                    product["cheapest_available_variants"] = requested_variants(product["variants"], "the cheapest available version")
                 preferences = {target["requested_variant"] for target in targets
                                if target["product_id"] == args["product_id"]}
                 if len(preferences) == 1:
@@ -1016,6 +1033,10 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                     candidates = requested_variants(product["variants"], preference)
                     if candidates:
                         product["available_option_hits"] = candidates[:8]
+                        if len(candidates) <= 8:
+                            preferred = preferred_variant_matches(candidates, opening)
+                            if preferred:
+                                product["preferred_available_option_hits"] = preferred
         if name == "get_product_details" and result["ok"]:
             active = active_request(state["messages"])
             product = result["data"]

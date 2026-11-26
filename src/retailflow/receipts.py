@@ -9,7 +9,7 @@ from retailflow.address_followups import advisory_opening
 from retailflow.preproposal import requested_variants
 
 
-def mixed_item_receipt_reply(messages, user_id):
+def mixed_item_receipt_reply(messages, user_id, products):
     """Render an active return and modification request with optional catalog alternatives."""
     start = next((index for index in range(len(messages) - 1, -1, -1)
                   if messages[index].additional_kwargs.get("request_start")), 0)
@@ -85,7 +85,7 @@ def mixed_item_receipt_reply(messages, user_id):
         options = []
         for product_id in dict.fromkeys(item["product_id"] for item in replacements):
             product = catalogs.get(product_id)
-            if product:
+            if product and product["variants"] == products.get(product_id, {}).get("variants"):
                 variants = requested_variants(product["variants"], alternate[1].lower())
                 options.extend(f"- {format_item(item)} — ${item['price']:.2f}" for item in variants or [])
         summary.append(f"Available {alternate[1]} options from the catalog read:" if options

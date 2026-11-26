@@ -256,7 +256,8 @@ class RetailRuntime:
         mixed_reply = None
         if (status == "answered" and confirmed_outcome
                 and confirmed_outcome.get("data", {}).get("status") in {"return requested", "pending (item modified)"}):
-            mixed_reply = mixed_item_receipt_reply(messages, confirmed_outcome["data"]["user_id"])
+            products = self.environment.load_session(thread_id)["business"]["products"]
+            mixed_reply = mixed_item_receipt_reply(messages, confirmed_outcome["data"]["user_id"], products)
         if mixed_reply is not None:
             metrics["original_model_answer"] = text
             text = mixed_reply

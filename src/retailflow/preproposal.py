@@ -239,6 +239,17 @@ def requested_variants(variants, preference):
     return None
 
 
+def preferred_variant_matches(candidates, customer_text):
+    preference = re.search(r"\bI prefer ([\w-]+) over ([\w-]+) and ([\w-]+) or ([\w-]+) "
+                           r"over other colors[.!]?\s*$", customer_text, re.I)
+    if not preference or preference[1].casefold() == preference[2].casefold():
+        return []
+    processor = preference[1].casefold()
+    colors = {preference[3].casefold(), preference[4].casefold()}
+    return [row for row in candidates if str(row["options"].get("processor", "")).casefold() == processor
+            and str(row["options"].get("color", "")).casefold() in colors]
+
+
 def preserved_variant_conflicts(customer_text, business, user_id, args):
     order = business["orders"].get(args["order_id"])
     if not order or order["user_id"] != user_id:

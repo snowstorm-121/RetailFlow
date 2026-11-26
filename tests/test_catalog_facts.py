@@ -81,3 +81,69 @@ def test_receipt_keeps_latest_successful_lookup_for_each_product(tmp_path):
     other_count = sum(v['available'] for v in products[other_id]['variants'].values())
     assert f"{products[other_id]['name']} ({other_id}): {other_count} available variants" in result['text']
 
+
+
+@pytest.mark.parametrize("catalog_changed", [False, True])
+def test_catalog_exposes_verified_preference_matches_after_return_confirmation(tmp_path, catalog_changed):
+    email = "aarav.santos8320@example.com"
+    speaker_order = "#W8528674"
+    worker, model, config = runtime(tmp_path, [
+        call("find_user_id_by_email", {"email": email}, "identity"),
+        call("get_product_details", {"product_id": "4760268021"}, "catalog"),
+        call("get_order_details", {"order_id": speaker_order}, "speaker"),
+        call("return_delivered_order_items", {"order_id": speaker_order, "item_ids": ["6704763132"],
+                                             "payment_method_id": "paypal_7664977"}, "return"),
+        call("ask_user", {"fields": ["payment_method"], "question": "Which payment method for the item change?"}, "method"),
+    ])
+
+    async def run():
+        thread = "preferred"
+        first = await worker.run_turn(thread, {"kind": "message", "text":
+            f"My email is {email}. Return the more expensive speaker that is not water resistant. "
+            "Modify the 17-inch laptop in another order to 13-inch. If the exact version is unavailable, "
+            "list all available 13-inch options; I prefer i5 over i7 and silver or black over other colors."}, config)
+        assert first["status"] == "needs_confirmation"
+        raw = next(m for m in worker.load_messages(thread) if isinstance(m, ToolMessage) and m.tool_call_id == "catalog")
+        view = next(m for m in model.inputs[2] if isinstance(m, ToolMessage) and m.tool_call_id == "catalog")
+        raw_data, visible = [json.loads(m.content)["data"] for m in (raw, view)]
+        assert raw_data["variants"]["3778566150"]["available"] is False
+        assert set(row["item_id"] for row in visible["available_option_hits"]) == {"1657832319", "5052031638", "6056040996"}
+        assert visible["variants"]["3778566150"]["available"] is False
+        assert [v["item_id"] for v in visible["preferred_available_option_hits"]] == ["5052031638"]
+        assert "5052031638" in model.inputs[2][-1].content
+        if catalog_changed:
+            business = worker.environment.load_session(thread)["business"]
+            business["products"]["4760268021"]["variants"]["5052031638"]["available"] = False
+            with worker.environment.storage.transaction() as db:
+                db.execute("UPDATE sessions SET business_json = ? WHERE thread = ?", (json.dumps(business), thread))
+        await worker.run_turn(thread, {"kind": "confirmation", "accepted": True,
+                                      "proposal_id": first["request"]["proposal_id"]}, config)
+        candidate = '"preferred_available_option_hits": [{"item_id": "5052031638"'
+        assert (candidate in model.inputs[-1][0].content) is not catalog_changed
+        if catalog_changed:
+            assert not any(candidate in message.content for message in model.inputs[-1])
+        assert worker.environment.pending_proposal(thread) is None
+
+    asyncio.run(run())
+
+
+def test_catalog_cheapest_summary_excludes_unavailable_and_retains_ties(tmp_path):
+    worker, model, config = runtime(tmp_path, [
+        call("find_user_id_by_name_zip", {"first_name": "Mei", "last_name": "Davis", "zip": "80217"}, "identity"),
+        call("get_product_details", {"product_id": "2747247837"}, "catalog"),
+        AIMessage(content="I have read the catalog."),
+    ])
+    worker.environment.create_session("cheapest", config["initial_state_ref"])
+    business = worker.environment.load_session("cheapest")["business"]
+    business["products"]["2747247837"]["variants"] = {
+        key: {"item_id": key, "options": {"color": key}, "price": price, "available": available}
+        for key, price, available in [("red", 1, False), ("green", 12, True), ("blue", 8, True), ("black", 8, True)]
+    }
+    with worker.environment.storage.transaction() as db:
+        db.execute("UPDATE sessions SET business_json = ? WHERE thread = ?", (json.dumps(business), "cheapest"))
+    result = asyncio.run(worker.run_turn("cheapest", {"kind": "message",
+        "text": "Mei Davis ZIP 80217. Can I exchange the pet bed for the cheapest version?"}, config))
+    assert result["status"] == "answered"
+    read = next(m for m in model.inputs[-1] if isinstance(m, ToolMessage) and m.tool_call_id == "catalog")
+    cheapest = json.loads(read.content)["data"]["cheapest_available_variants"]
+    assert {(variant["item_id"], variant["price"]) for variant in cheapest} == {("blue", 8), ("black", 8)}

@@ -12,7 +12,8 @@ VISIBLE_FIELDS = {"order_id", "user_id", "status", "items", "item_id", "product_
                   "proposal_id", "reason", "data", "orders", "order_summaries", "address_order_candidates", "matched_terms", "source", "id", "last_four",
                   "transaction_type", "amount", "variants", "options", "available", "message", "fields", "question",
                   "address_copy", "source_order_id", "destination_order_id", "update_default", "item_change_targets", "requested_variant",
-                  "scope", "order_ids", "source_quote", "available_variant_count", "available_option_hits", "matched_options", "exchange_items",
+                  "scope", "order_ids", "source_quote", "available_variant_count", "available_option_hits",
+                  "preferred_available_option_hits", "cheapest_available_variants", "matched_options", "exchange_items",
                   "exchange_new_items", "exchange_payment_method_id", "exchange_price_difference"}
 
 
@@ -31,16 +32,24 @@ def _visible(value):
     return value
 
 
-def _tool_view(message):
+def _tool_view(message, products=None):
     try:
         result = json.loads(message.content)
     except (TypeError, ValueError):
         result = {"code": "UNPARSEABLE_TOOL_RESULT"}
+    status = message.status
+    if products is not None and message.name == "get_product_details" and result.get("ok"):
+        data = result["data"]
+        has_candidates = "preferred_available_option_hits" in data or "cheapest_available_variants" in data
+        if has_candidates and data["variants"] != products.get(data["product_id"], {}).get("variants"):
+            result = {"ok": False, "code": "STALE_CATALOG_READ",
+                      "message": "The product catalog changed after this read. Read it again before choosing a variant."}
+            status = "error"
     return ToolMessage(content=json.dumps(_visible(result), ensure_ascii=False), id=message.id, name=message.name,
-                       tool_call_id=message.tool_call_id, status=message.status)
+                       tool_call_id=message.tool_call_id, status=status)
 
 
-def _blocks(messages, structured=True):
+def _blocks(messages, structured=True, products=None):
     blocks = []
     superseded = {draft_id for message in messages if message.additional_kwargs.get("application_proposal")
                   for draft_id in message.additional_kwargs.get("superseded_draft_ids", ()) if draft_id}
@@ -66,7 +75,8 @@ def _blocks(messages, structured=True):
                 results.append(messages[cursor])
                 cursor += 1
             if ids == {result.tool_call_id for result in results} and len(ids) == len(results):
-                blocks.append([message, *(map(_tool_view, results) if structured else results)])
+                blocks.append([message, *(_tool_view(result, products) for result in results)]
+                              if structured else [message, *results])
             index = cursor
             continue
         blocks.append([message])
@@ -89,7 +99,7 @@ def build_model_context(state: dict, config: dict) -> list:
     structured = config.get("structured_context", True)
     prefix = [system] if structured else []
     budget = int(config.get("context_budget_tokens", 4096))
-    blocks = _blocks(state["messages"], structured)
+    blocks = _blocks(state["messages"], structured, state.get("business", {}).get("products"))
     costs = [len(json.dumps(messages_to_dict(block), ensure_ascii=False)) // 4 + 1 for block in blocks]
     selected = {len(blocks) - 1} if blocks else set()
     # User turns are bounded by the episode budget. Keep original requests and

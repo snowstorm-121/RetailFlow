@@ -626,10 +626,11 @@ def test_return_confirmation_repair_requires_independent_eligible_scope(tmp_path
     assert worker.environment.pending_proposal("return-question") is None
 
 
-@pytest.mark.parametrize(("recover_commit", "extra_request"), [
-    (False, ""), (True, ""), (False, " Explain why my previous refund was declined."),
+@pytest.mark.parametrize(("recover_commit", "extra_request", "stale_catalog"), [
+    (False, "", False), (True, "", False), (False, " Explain why my previous refund was declined.", False),
+    (False, "", True),
 ])
-def test_mixed_write_reply_uses_actual_replacement_and_both_receipts(tmp_path, recover_commit, extra_request):
+def test_mixed_write_reply_uses_actual_replacement_and_both_receipts(tmp_path, recover_commit, extra_request, stale_catalog):
     email = "aarav.santos8320@example.com"
     speaker_order, laptop_order = "#W8528674", "#W9672333"
     returned = {"order_id": speaker_order, "item_ids": ["6704763132"], "payment_method_id": "paypal_7664977"}
@@ -658,6 +659,11 @@ def test_mixed_write_reply_uses_actual_replacement_and_both_receipts(tmp_path, r
                                                "proposal_id": first["request"]["proposal_id"]}, config)
         assert second["status"] == "needs_confirmation"
         proposal_id = second["request"]["proposal_id"]
+        if stale_catalog:
+            business = worker.environment.load_session(thread)["business"]
+            business["products"]["4760268021"]["variants"]["1657832319"]["available"] = False
+            with worker.environment.storage.transaction() as db:
+                db.execute("UPDATE sessions SET business_json = ? WHERE thread = ?", (json.dumps(business), thread))
         if recover_commit:
             assert worker.environment.confirm_action(thread, proposal_id, True)["ok"]
             assert worker.environment.dispatch_tool(thread, "modify_pending_order_items", modified)["ok"]
@@ -669,8 +675,13 @@ def test_mixed_write_reply_uses_actual_replacement_and_both_receipts(tmp_path, r
             return
         assert final["usage"]["original_model_answer"] == draft
         for fact in ("Bluetooth Speaker", "return requested", "PayPal", "13-inch", "16GB", "113.71",
-                     "No real payment was sent", "6056040996", "1657832319", "5052031638"):
+                     "No real payment was sent", "5052031638"):
             assert fact.lower() in final["text"].lower()
+        if stale_catalog:
+            assert "alternatives could not be verified" in final["text"]
+            assert "1657832319" not in final["text"]
+        else:
+            assert "6056040996" in final["text"] and "1657832319" in final["text"]
         assert "101.31" not in final["text"]
         assert "still proposals" not in final["text"]
         assert "charged to your PayPal" not in final["text"]
