@@ -306,3 +306,48 @@ def test_revisiting_an_order_preserves_active_order_selection(tmp_path, monkeypa
     assert result["usage"]["reused_reads"] == 1
     assert orders == [first, second, first]
     assert worker.environment.load_session("order-target")["target_order_id"] == first
+
+
+@pytest.mark.parametrize(("question", "refund_question"), [
+    ("What is your email?", None),
+    ("Could you confirm your email and preferred refund method?", "Which refund method would you like to use?"),
+    ("Could you confirm your email and what is your preferred refund method for #W5056519 (original or gift card)?",
+     "What is your preferred refund method for #W5056519 (original or gift card)?"),
+])
+def test_verified_identity_does_not_pause_for_repeated_identity(tmp_path, question, refund_question):
+    fields = ["identity", "refund_method"] if refund_question else ["identity"]
+    worker, _, config = runtime(tmp_path, [
+        call("find_user_id_by_name_zip", {"first_name": "Yara", "last_name": "Muller", "zip": "85041"}, "login"),
+        call("ask_user", {"fields": fields, "question": question}, "duplicate-identity"),
+        call("get_order_details", {"order_id": "#W5056519"}, "order"),
+        AIMessage(content="The order is pending."),
+    ])
+    result = asyncio.run(worker.run_turn("verified", {"kind": "message",
+        "text": "Yara Muller, ZIP 85041. Please check order #W5056519."}, config))
+    if refund_question:
+        assert result["status"] == "needs_input"
+        assert result["request"] == {"fields": ["refund_method"], "question": refund_question}
+    else:
+        assert result["status"] == "answered"
+        assert result["text"] == "The order is pending."
+        assert any(isinstance(message, ToolMessage) and message.tool_call_id == "duplicate-identity"
+                   and json.loads(message.content)["code"] == "IDENTITY_ALREADY_VERIFIED"
+                   for message in worker.load_messages("verified"))
+
+
+def test_identity_guard_only_uses_verification_for_active_request(tmp_path):
+    identity = {"fields": ["identity"], "question": "What is your name and ZIP?"}
+    worker, _, config = runtime(tmp_path, [
+        call("find_user_id_by_name_zip", {"first_name": "Yara", "last_name": "Muller", "zip": "85041"}, "login"),
+        AIMessage(content="Your account was located."),
+        call("ask_user", identity, "new-request"),
+    ])
+
+    async def run():
+        first = await worker.run_turn("scope", {"kind": "message", "text": "I am Yara Muller, ZIP 85041."}, config)
+        assert first["status"] == "answered"
+        result = await worker.run_turn("scope", {"kind": "message", "text": "I have a question about another account."}, config)
+        assert result["status"] == "needs_input"
+        assert result["request"] == identity
+
+    asyncio.run(run())

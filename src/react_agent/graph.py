@@ -822,7 +822,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                     and isinstance(args["fields"], list) and args["fields"]
                     and all(isinstance(field, str) and field in ASK_USER_FIELDS for field in args["fields"])
                     and len(set(args["fields"])) == len(args["fields"])):
-                customer_text = " ".join(message.content for message in active_request(state["messages"])
+                active = active_request(state["messages"])
+                customer_text = " ".join(message.content for message in active
                                          if isinstance(message, HumanMessage) and isinstance(message.content, str))
                 address_text = re.sub(r"\be-?mail address\b", "email", args["question"] + " " + customer_text, flags=re.I)
                 question = args["question"]
@@ -837,6 +838,34 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                     metrics["clarification_fields_normalized"] = metrics.get("clarification_fields_normalized", 0) + 1
                 result = {"ok": True, "code": "NEEDS_INPUT", "data": args}
                 status, request = "needs_input", args
+                if "identity" in args["fields"]:
+                    user_id = environment.load_session(thread_id)["user_id"]
+                    verified = user_id and any(
+                        isinstance(message, ToolMessage) and message.name in IDENTITY_TOOLS
+                        and message.status == "success" and json.loads(message.content).get("data") == user_id
+                        for message in active
+                    )
+                    if verified:
+                        metrics["identity_clarifications_skipped"] = metrics.get("identity_clarifications_skipped", 0) + 1
+                        remaining = [field for field in args["fields"] if field != "identity"]
+                        refund_question = None
+                        if remaining == ["refund_method"]:
+                            refund = re.search(r"\band ((?:what is your (?:preferred )?|which )refund method"
+                                               r"\b[^?]*\?)\s*$", question, re.I)
+                            if refund and not re.search(r"\b(?:e-?mail|ZIP|full name|identity)\b", refund[1], re.I):
+                                refund_question = refund[1][0].upper() + refund[1][1:]
+                            elif re.fullmatch(r"(?:could|can|would) you (?:please )?confirm (?:your )?e-?mail"
+                                              r"(?: address)? and (?:your )?preferred refund method\?", question, re.I):
+                                refund_question = "Which refund method would you like to use?"
+                        if refund_question:
+                            request = {"fields": remaining, "question": refund_question}
+                            result["data"] = request
+                        else:
+                            guidance = ("Ask only for any other information that is still missing: " + ", ".join(remaining)
+                                        if remaining else "Continue with the customer's request using the verified account.")
+                            result = {"ok": False, "code": "IDENTITY_ALREADY_VERIFIED",
+                                      "message": "The active request already verified this account. " + guidance}
+                            status, request = "running", None
             else:
                 result = {"ok": False, "code": "INVALID_ARGUMENT", "message": "ask_user needs fields and question."}
                 status, request = "running", None
