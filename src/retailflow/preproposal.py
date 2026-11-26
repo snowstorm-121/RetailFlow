@@ -2,6 +2,51 @@
 
 import re
 
+from retailflow.address_followups import advisory_opening
+
+
+def inventory_order_request(customer_messages):
+    """Keep product mentions across recognized identity and order-discovery replies."""
+    if not customer_messages:
+        return "", False
+    lookup = (r"(?:I don't remember[;.] )?please look through my orders\.?|"
+              r"please find the order containing those items\.?")
+    email = r"[\w.+-]+@[\w.-]+\.[A-Za-z]+"
+    identity = (rf"(?:You|Your) name is [\w' -]+ and your emails are {email}(?: and {email})+\.?|"
+                r"You are [\w' -]+, residing in [\w -]+ \d{5}\.?")
+    followups = []
+    delegated = False
+    for text in customer_messages[1:]:
+        if re.fullmatch(lookup, text.strip(), re.I):
+            delegated = True
+        elif match := re.fullmatch(rf"(?:{identity})(?: (?P<lookup>{lookup}))?", text.strip(), re.I):
+            delegated = delegated or bool(match["lookup"])
+        else:
+            followups.append(text)
+    return advisory_opening([customer_messages[0], *followups]), delegated
+
+
+def product_order_candidates(customer_text, business, user_id, order_ids):
+    """List owned orders containing explicitly mentioned product names."""
+    if not user_id or not customer_text or re.search(r"#w\d+", customer_text, re.I):
+        return []
+    candidates = []
+    for order_id in order_ids:
+        order = business["orders"].get(order_id)
+        if not order or order["user_id"] != user_id:
+            continue
+        names = {item["name"] for item in order["items"]}
+        matched = set()
+        for name in sorted(names):
+            words = re.findall(r"[a-z0-9]+", name.casefold())
+            pattern = r"(?<!\w)" + r"[-\s]+".join(map(re.escape, words)) + r"(?:s|es)?(?!\w)"
+            if words and re.search(pattern, customer_text, re.I):
+                matched.add(name)
+        if matched:
+            items = [{"name": item["name"], "options": item["options"]} for item in order["items"] if item["name"] in matched]
+            candidates.append({"order_id": order_id, "status": order["status"], "items": items})
+    return candidates if len(candidates) <= 8 else []
+
 
 def address_order_candidates(customer_text, business, user_id, order_ids):
     clauses = [clause.lower() for clause in re.split(r"(?<=[.!?])\s+|\n", customer_text)

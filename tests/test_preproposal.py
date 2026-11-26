@@ -563,3 +563,66 @@ def test_item_cancellation_fallback_abstains_when_condition_or_scope_is_unproven
     variants["test-variant"]["available"] = False
     order["items"].append({**item, "item_id": "second-bookshelf"})
     assert item_cancel_fallbacks(request, business, user) == ([], "")
+
+
+@pytest.mark.parametrize("followup", ["read", "repeat", "revision"])
+def test_owned_order_candidates_survive_identity_then_discovery_request(tmp_path, followup):
+    email = "sofia.thomas3069@example.com"
+    agent, model, config = runtime(tmp_path, [
+        call("ask_user", {"fields": ["identity"], "question": "What is your email?"}, "question"),
+        call("find_user_id_by_email", {"email": email}, "identity"),
+        call("get_user_details", {"user_id": "sofia_thomas_1518"}, "profile"),
+        call("get_user_details", {"user_id": "sofia_thomas_1518"}, "profile-repeat"),
+        call("ask_user", {"fields": ["order"], "question": "Could you give me the order number?"}, "first-order-question"),
+        call("ask_user", {"fields": ["order"], "question": "What is the T-shirt order ID?"}, "repeated-order-question"),
+        (call("ask_user", {"fields": ["order"], "question": "Can you give the ID?"}, "extra-order-question")
+         if followup == "repeat" else call("get_order_details", {"order_id": "#W3388163"}, "matching-order")),
+        AIMessage(content="I found the delivered T-shirt order."),
+    ])
+
+    async def run():
+        thread = "order-discovery"
+        await agent.run_turn(thread, {"kind": "message", "text":
+            "The T-shirt I received is too large. Exchange it for one size smaller."}, config)
+        result = await agent.run_turn(thread, {"kind": "message", "text":
+            f"You name is Sofia Thomas and your emails are sofia.thomas3019@example.com and {email}."}, config)
+        assert result["status"] == "needs_input"
+        read = next(m for m in model.inputs[-1] if isinstance(m, ToolMessage) and m.tool_call_id == "profile")
+        candidates = [{"order_id": "#W3388163", "status": "delivered", "items": [
+            {"name": "T-Shirt", "options": {"color": "red", "size": "XXL", "material": "cotton", "style": "crew neck"}},
+        ]}]
+        assert json.loads(read.content)["data"]["product_order_candidates"] == candidates
+
+        text = "Actually, leave the T-shirt alone." if followup == "revision" else "Please find the order containing those items."
+        result = await agent.run_turn(thread, {"kind": "message", "text": text}, config)
+        assert result["status"] == ("answered" if followup == "read" else "needs_input")
+        if followup == "revision":
+            stale_profiles = [m for m in model.inputs[-1] if isinstance(m, ToolMessage)
+                              and m.tool_call_id in {"profile", "profile-repeat"}]
+            assert len(stale_profiles) == 2
+            assert all("product_order_candidates" not in json.loads(m.content)["data"] for m in stale_profiles)
+            return
+        messages = agent.load_messages(thread)
+        reprompt = next(m for m in messages if isinstance(m, ToolMessage) and m.tool_call_id == "repeated-order-question")
+        assert json.loads(reprompt.content)["data"]["product_order_candidates"] == candidates
+        assert agent.environment.pending_proposal(thread) is None
+
+    asyncio.run(run())
+
+
+def test_product_order_candidates_keep_ambiguity_and_explicit_references_separate():
+    from retailflow.preproposal import inventory_order_request, product_order_candidates
+    from retailflow.upstream.paths import RETAIL_DB_PATH
+
+    business = json.loads(RETAIL_DB_PATH.read_text())
+    uid = "yusuf_rossi_9620"
+    orders = [*business["users"][uid]["orders"], "#W3388163"]
+    candidates = product_order_candidates("Modify my pending T-shirts to purple.", business, uid, orders)
+    assert {c["order_id"] for c in candidates} == {"#W6247578", "#W4776164"}
+    assert product_order_candidates("Modify the T-shirt in #W6247578.", business, uid, orders) == []
+    assert product_order_candidates("Find my T-shirt.", business, None, orders) == []
+
+    request = "Exchange my wireless earbuds."
+    identity = "You are Aarav Anderson, residing in Philadelphia 19031. I don't remember; please look through my orders."
+    assert inventory_order_request([request, identity]) == (request, True)
+    assert inventory_order_request([request, identity, "Actually, leave the earbuds alone."]) == ("", True)

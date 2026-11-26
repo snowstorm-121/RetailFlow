@@ -163,9 +163,9 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
 
     from retailflow.context import ContextBudgetExceeded, build_model_context
     from retailflow.preproposal import (address_copy_target, address_order_candidates, cross_product_cancel_target,
-                                        false_cancellation_claim, item_cancel_fallbacks,
+                                        false_cancellation_claim, inventory_order_request, item_cancel_fallbacks,
                                         item_change_targets, item_order_excluded, preserved_variant_conflicts,
-                                        preferred_variant_matches, requested_variants, wrong_item_target)
+                                        preferred_variant_matches, product_order_candidates, requested_variants, wrong_item_target)
     from retailflow.address_followups import (advisory_opening, explicit_address_steps, matching_variants,
                                               processing_guarantee_fact, verified_address_reply)
     from retailflow.cancel_goals import GOAL_TOOL, GOAL_PROMPT, validate_goal, goal_progress
@@ -194,6 +194,10 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
     def request_text(messages):
         return advisory_opening([m.content for m in messages
                                  if isinstance(m, HumanMessage) and isinstance(m.content, str)])
+
+    def inventory_request(messages):
+        return inventory_order_request([m.content for m in messages
+                                        if isinstance(m, HumanMessage) and isinstance(m.content, str)])
 
     def read_scope(session):
         last_receipt = session.get("last_receipt") or {}
@@ -436,6 +440,14 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             prompt += ("\nIf the authenticated profile shows address_order_candidates, read the matching order before "
                        "drawing conclusions. Verify the city and requested item in that order. Address candidates are "
                        "search hints, not evidence that a shipping or account address should be changed.")
+        inventory_text, _ = inventory_request(active_messages)
+        lookup_request_id = active_messages[0].id if inventory_text else None
+        if lookup_request_id and any(message.name == "get_user_details"
+                and message.additional_kwargs.get("product_lookup_request_id") == lookup_request_id
+                for message in active_messages):
+            prompt += ("\nUse product_order_candidates from the profile to prioritize get_order_details. "
+                       "Verify each relevant matching order before saying the item or requested options are absent. "
+                       "Candidates do not establish eligibility or authorize a write.")
         deadline_fact = processing_guarantee_fact(opening)
         if deadline_fact:
             prompt += "\n" + deadline_fact
@@ -465,6 +477,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         try:
             visible = build_model_context({**session, "messages": context_messages},
                                           {"context_budget_tokens": budget, "structured_context": config.get("structured_context", True),
+                                           "product_lookup_request_id": lookup_request_id,
                                            "required_outcome_ids": {message.id for message in outcomes}
                                            if address_request or remaining_question or continue_item_change else set()})
         except ContextBudgetExceeded:
@@ -832,6 +845,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         read_key = None
         read_session = None
         reused_read = False
+        lookup_request_id = None
         focused_key = "user_id" if focused_step and "user_id" in focused_step else "order_id"
         focused_mismatch = bool(focused_step and name in WRITE_TOOLS and
                                 ((name, args.get(focused_key)) != (focused_step["tool"], focused_step[focused_key])
@@ -889,6 +903,25 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                     metrics["clarification_fields_normalized"] = metrics.get("clarification_fields_normalized", 0) + 1
                 result = {"ok": True, "code": "NEEDS_INPUT", "data": args}
                 status, request = "needs_input", args
+                if args["fields"] == ["order"]:
+                    lookup_text, delegated = inventory_request(active)
+                    if delegated and lookup_text:
+                        session = environment.load_session(thread_id)
+                        user_id = session["user_id"]
+                        order_ids = session["business"]["users"].get(user_id, {}).get("orders", ())
+                        matches = product_order_candidates(lookup_text, session["business"], user_id, order_ids)
+                        if len(matches) == 1 and not any(
+                            isinstance(m, ToolMessage) and (
+                                (m.name == "get_order_details" and m.status == "success"
+                                 and json.loads(m.content)["data"]["order_id"] == matches[0]["order_id"])
+                                or (m.name == "ask_user" and json.loads(m.content).get("code") == "ORDER_LOOKUP_AVAILABLE")
+                            ) for m in active
+                        ):
+                            result = {"ok": False, "code": "ORDER_LOOKUP_AVAILABLE",
+                                      "message": "The customer asked you to find the order. Read this owned candidate with get_order_details.",
+                                      "data": {"product_order_candidates": matches}}
+                            lookup_request_id = active[0].id
+                            status, request = "running", None
                 if "identity" in args["fields"]:
                     user_id = environment.load_session(thread_id)["user_id"]
                     verified = user_id and any(
@@ -1029,6 +1062,11 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                                                       result["data"]["orders"])
                 if candidates:
                     result["data"]["address_order_candidates"] = candidates
+                lookup_text, _ = inventory_request(active)
+                candidates = product_order_candidates(lookup_text, session["business"], session["user_id"],
+                                                      result["data"]["orders"])
+                if candidates:
+                    result["data"]["product_order_candidates"] = candidates
             elif name == "get_order_details":
                 targets = [target for target in targets if target["order_id"] == args["order_id"]]
                 if targets:
@@ -1084,6 +1122,10 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         metrics["tool_seconds"] += time.perf_counter() - start
         metrics["tool_calls"] += int(not reused_read) + retries
         metadata = {"focused_write_mismatch": True} if focused_mismatch else {}
+        if name == "get_user_details" and result["ok"] and result["data"].get("product_order_candidates"):
+            lookup_request_id = active_request(state["messages"])[0].id
+        if lookup_request_id:
+            metadata["product_lookup_request_id"] = lookup_request_id
         if copy and status == "needs_confirmation" and name in ADDRESS_TOOLS:
             metadata.update(address_copy=copy, address_copy_user_id=session["user_id"])
         message = ToolMessage(content=json.dumps(result, ensure_ascii=False), name=name, tool_call_id=call["id"],

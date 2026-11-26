@@ -9,7 +9,8 @@ VISIBLE_FIELDS = {"order_id", "user_id", "status", "items", "item_id", "product_
                   "price", "quantity", "payment_methods", "payment_method_id", "payment_history",
                   "return_items", "return_payment_method_id", "cancel_reason", "balance", "address",
                   "first_name", "last_name", "zip", "address1", "address2", "city", "state", "country", "email", "fulfillments", "tracking_id", "code", "ok",
-                  "proposal_id", "reason", "data", "orders", "order_summaries", "address_order_candidates", "matched_terms", "source", "id", "last_four",
+                  "proposal_id", "reason", "data", "orders", "order_summaries", "address_order_candidates",
+                  "product_order_candidates", "matched_terms", "source", "id", "last_four",
                   "transaction_type", "amount", "variants", "options", "available", "message", "fields", "question",
                   "address_copy", "source_order_id", "destination_order_id", "update_default", "item_change_targets", "requested_variant",
                   "scope", "order_ids", "source_quote", "available_variant_count", "available_option_hits",
@@ -32,12 +33,21 @@ def _visible(value):
     return value
 
 
-def _tool_view(message, products=None):
+def _tool_view(message, products=None, lookup_request_id=None, structured=True):
+    hint_request_id = message.additional_kwargs.get("product_lookup_request_id")
+    stale_hint = hint_request_id is not None and hint_request_id != lookup_request_id
+    if not structured and not stale_hint:
+        return message
     try:
         result = json.loads(message.content)
     except (TypeError, ValueError):
         result = {"code": "UNPARSEABLE_TOOL_RESULT"}
     status = message.status
+    if stale_hint:
+        result.get("data", {}).pop("product_order_candidates", None)
+        if result.get("code") == "ORDER_LOOKUP_AVAILABLE":
+            result = {"ok": False, "code": "ORDER_LOOKUP_SUPERSEDED",
+                      "message": "Use the customer's current request."}
     if products is not None and message.name == "get_product_details" and result.get("ok"):
         data = result["data"]
         has_candidates = "preferred_available_option_hits" in data or "cheapest_available_variants" in data
@@ -45,11 +55,12 @@ def _tool_view(message, products=None):
             result = {"ok": False, "code": "STALE_CATALOG_READ",
                       "message": "The product catalog changed after this read. Read it again before choosing a variant."}
             status = "error"
-    return ToolMessage(content=json.dumps(_visible(result), ensure_ascii=False), id=message.id, name=message.name,
+    content = json.dumps(_visible(result) if structured else result, ensure_ascii=False)
+    return ToolMessage(content=content, id=message.id, name=message.name,
                        tool_call_id=message.tool_call_id, status=status)
 
 
-def _blocks(messages, structured=True, products=None):
+def _blocks(messages, structured=True, products=None, lookup_request_id=None):
     blocks = []
     superseded = {draft_id for message in messages if message.additional_kwargs.get("application_proposal")
                   for draft_id in message.additional_kwargs.get("superseded_draft_ids", ()) if draft_id}
@@ -75,8 +86,8 @@ def _blocks(messages, structured=True, products=None):
                 results.append(messages[cursor])
                 cursor += 1
             if ids == {result.tool_call_id for result in results} and len(ids) == len(results):
-                blocks.append([message, *(_tool_view(result, products) for result in results)]
-                              if structured else [message, *results])
+                blocks.append([message, *(_tool_view(result, products if structured else None, lookup_request_id, structured)
+                                          for result in results)])
             index = cursor
             continue
         blocks.append([message])
@@ -99,7 +110,8 @@ def build_model_context(state: dict, config: dict) -> list:
     structured = config.get("structured_context", True)
     prefix = [system] if structured else []
     budget = int(config.get("context_budget_tokens", 4096))
-    blocks = _blocks(state["messages"], structured, state.get("business", {}).get("products"))
+    blocks = _blocks(state["messages"], structured, state.get("business", {}).get("products"),
+                     config.get("product_lookup_request_id"))
     costs = [len(json.dumps(messages_to_dict(block), ensure_ascii=False)) // 4 + 1 for block in blocks]
     selected = {len(blocks) - 1} if blocks else set()
     # User turns are bounded by the episode budget. Keep original requests and
