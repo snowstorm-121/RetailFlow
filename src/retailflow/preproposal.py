@@ -49,6 +49,77 @@ def product_order_candidates(customer_text, business, user_id, order_ids):
     return candidates if len(candidates) <= 8 else []
 
 
+def single_item_exchange(text, business, user_id, selection=None):
+    """Resolve a literal single-item exchange and supported relative clothing sizes."""
+    if not user_id:
+        return None
+    relative = re.fullmatch(
+        r"(?:the ([\w -]+?) I received is too large\. Exchange it|(?:please )?exchange (?:my|the) ([\w -]+?))"
+        r" for one size smaller(?:\. Keep it ([\w -]+?)(?:, and I prefer ([\w -]+?) if available)?)?\.?",
+        text, re.I,
+    )
+    direct = re.fullmatch(
+        r"(?:I received an? ([\w -]+?) and (?:want|would like) to exchange it for|"
+        r"(?:please )?exchange (?:an?|my|the) ([\w -]+?) I received (?:to|for)) [^.!?]+[.!]?", text, re.I,
+    )
+    if direct and re.search(r"\b(?:if|unless|instead|only when|whichever)\b", text, re.I):
+        direct = None
+    request = relative or direct
+    if not request:
+        return None
+    name = (request[1] or request[2]).casefold()
+    matches = [
+        {"order_id": order_id, **item}
+        for order_id in business["users"][user_id]["orders"]
+        if (order := business["orders"].get(order_id)) and order["user_id"] == user_id and order["status"] == "delivered"
+        for item in order["items"] if item["name"].casefold() == name
+    ]
+    if not matches:
+        return None
+    if selection:
+        order_ref = re.fullmatch(r"(?:order )?(#W\d+)\.?", selection.strip(), re.I)
+        description = re.fullmatch(r"(?:the )?(?:([\w-]+) )?" + re.escape(name)
+                                  + r"(?: with ([\w-]+(?: (?:GB|TB))?)(?: (RAM|SSD|processor))?)?\.?",
+                                  selection.strip(), re.I)
+        if order_ref:
+            selected = [row for row in matches if row["order_id"] == order_ref[1].upper()]
+        elif description:
+            first, spec, label = (value.casefold().replace(" ", "") if value else "" for value in description.groups())
+            key = {"ram": "ram", "ssd": "storage", "processor": "processor"}.get(label)
+            if label == "ssd":
+                spec += "ssd"
+            selected = []
+            for row in matches:
+                options = {key: str(value).casefold().replace(" ", "") for key, value in row["options"].items()}
+                values = set(options.values())
+                if (not first or first in values) and (not spec or
+                        (options.get(key) == spec if key else spec in values)):
+                    selected.append(row)
+        elif re.search(r"\b(?:instead|never mind|changed my mind|leave|stop|do not|don['’]t want|"
+                       r"no longer|cancel|return)\b|^(?:please )?(?:check|track|tell|show)\b", selection, re.I):
+            return None
+        else:
+            selected = []
+        if selected:
+            matches = selected
+        elif len(matches) == 1:
+            return {"items": []}
+    scope = {"items": [{key: item[key] for key in ("order_id", "item_id", "name", "options")} for item in matches]}
+    if relative and len(matches) == 1:
+        item = matches[0]
+        sizes = ("XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL")
+        old_size = item["options"].get("size", "").upper()
+        size = sizes[sizes.index(old_size) - 1] if old_size in sizes[1:] else None
+        variants = business["products"][item["product_id"]]["variants"].values()
+        replacements = [v for v in variants if size and v["available"] and v["options"].get("size", "").upper() == size
+                        and (not relative[3] or v["options"].get("material", "").casefold() == relative[3].casefold())]
+        if relative[4]:
+            preferred = [v for v in replacements if v["options"].get("color", "").casefold() == relative[4].casefold()]
+            replacements = preferred or replacements
+        scope.update(requested_size=size, available_replacements=replacements)
+    return scope
+
+
 def address_order_candidates(customer_text, business, user_id, order_ids):
     clauses = [clause.lower() for clause in re.split(r"(?<=[.!?])\s+|\n", customer_text)
                if re.search(r"\baddress\b", clause, re.I)]

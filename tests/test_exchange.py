@@ -198,3 +198,88 @@ def test_exchange_runtime_displays_proposal_and_unsettled_outcome(tmp_path):
     assert 'An email was sent' not in second['text']
     trace = json.loads(__import__('pathlib').Path(second['trace_path']).read_text())
     assert 'An email was sent' in trace['usage']['original_model_answer']
+
+
+def test_single_exchange_clarifies_which_delivered_item_before_proposing(tmp_path):
+    import asyncio
+    from langchain_core.messages import ToolMessage
+    from test_agent_loop import call, runtime
+
+    correct = {"order_id": "#W4073673", "item_ids": ["2216662955"], "new_item_ids": ["9844888101"],
+               "payment_method_id": "credit_card_3677959"}
+    wrong = {**correct, "order_id": "#W2905754", "item_ids": ["3478699712"]}
+    worker, _, config = runtime(tmp_path, [
+        call("ask_user", {"fields": ["identity"], "question": "What is your name and ZIP?"}, "question"),
+        call("find_user_id_by_name_zip", {"first_name": "Lei", "last_name": "Wilson", "zip": "32255"}, "identity"),
+        call("ask_user", {"fields": ["payment_method"], "question": "Which payment method?"}, "payment"),
+        call(TOOL, wrong, "wrong-source"),
+        call(TOOL, correct, "proposal"),
+    ])
+
+    async def run():
+        await worker.run_turn("laptop", {"kind": "message", "text":
+            "I received a laptop and want to exchange it for one with an i7 processor, 8GB RAM and 1TB SSD."}, config)
+        question = await worker.run_turn("laptop", {"kind": "message",
+            "text": "You name is Lei Wilson and your zip code is 32255."}, config)
+        assert question["status"] == "needs_input"
+        assert question["request"]["fields"] == ["exchange_items"]
+        assert "16GB" in question["text"] and "32GB" in question["text"]
+        assert worker.environment.pending_proposal("laptop") is None
+
+        payment = await worker.run_turn("laptop", {"kind": "message", "text": "The 15-inch laptop with 32 GB RAM."}, config)
+        assert payment["request"]["fields"] == ["payment_method"]
+        result = await worker.run_turn("laptop", {"kind": "message", "text": "Use my Visa."}, config)
+        assert result["status"] == "needs_confirmation"
+        assert result["request"]["args"] == correct
+        rejected = next(m for m in worker.load_messages("laptop") if isinstance(m, ToolMessage) and m.tool_call_id == "wrong-source")
+        assert json.loads(rejected.content)["code"] == "INVALID_ARGUMENT"
+        assert worker.environment.get_order("laptop", correct["order_id"])["status"] == "delivered"
+
+    asyncio.run(run())
+
+
+def test_single_exchange_scope_keeps_ambiguous_answers_and_rejects_unknown_size():
+    from retailflow.preproposal import single_item_exchange
+    from retailflow.upstream.paths import RETAIL_DB_PATH
+
+    business = json.loads(RETAIL_DB_PATH.read_text())
+    request = "I received a laptop and want to exchange it for one with an i7 processor."
+    user = "lei_wilson_4541"
+    assert len(single_item_exchange(request, business, user, "The silver one.")["items"]) == 2
+    assert len(single_item_exchange(request, business, user, "The 15-inch laptop with 32GB SSD.")["items"]) == 2
+    assert single_item_exchange(request, business, user, "Actually, leave the laptop alone.") is None
+    shirt = next(item for item in business["orders"]["#W3388163"]["items"] if item["name"] == "T-Shirt")
+    shirt["options"]["size"] = "42"
+    result = single_item_exchange("Exchange my T-shirt for one size smaller.", business, "sofia_thomas_1518")
+    assert result["requested_size"] is None
+    assert result["available_replacements"] == []
+
+
+def test_relative_exchange_size_rejects_same_size_before_confirmation(tmp_path):
+    import asyncio
+    from langchain_core.messages import ToolMessage
+    from test_agent_loop import call, runtime
+
+    email = "sofia.thomas3069@example.com"
+    correct = {"order_id": "#W3388163", "item_ids": ["9354168549"], "new_item_ids": ["2060066974"],
+               "payment_method_id": "paypal_5334408"}
+    worker, model, config = runtime(tmp_path, [
+        call("ask_user", {"fields": ["identity"], "question": "What is your email?"}, "question"),
+        call("find_user_id_by_email", {"email": email}, "identity"),
+        call(TOOL, {**correct, "new_item_ids": ["3799046073"]}, "same-size"),
+        call(TOOL, correct, "proposal"),
+    ])
+
+    async def run():
+        await worker.run_turn("shirt", {"kind": "message", "text":
+            "The T-shirt I received is too large. Exchange it for one size smaller. Keep it cotton, and I prefer black if available."}, config)
+        result = await worker.run_turn("shirt", {"kind": "message", "text":
+            f"You name is Sofia Thomas and your emails are sofia.thomas3019@example.com and {email}."}, config)
+        assert result["status"] == "needs_confirmation"
+        assert result["request"]["args"] == correct
+        assert "2060066974" in model.inputs[-1][0].content
+        rejected = next(m for m in worker.load_messages("shirt") if isinstance(m, ToolMessage) and m.tool_call_id == "same-size")
+        assert json.loads(rejected.content)["code"] == "INVALID_ARGUMENT"
+        assert worker.environment.get_order("shirt", correct["order_id"])["status"] == "delivered"
+
+    asyncio.run(run())

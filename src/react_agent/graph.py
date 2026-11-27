@@ -175,7 +175,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
     from retailflow.preproposal import (address_copy_target, address_order_candidates, cross_product_cancel_target,
                                         false_cancellation_claim, inventory_order_request, item_cancel_fallbacks,
                                         item_change_targets, item_order_excluded, preserved_variant_conflicts,
-                                        preferred_variant_matches, product_order_candidates, requested_variants, wrong_item_target)
+                                        preferred_variant_matches, product_order_candidates, requested_variants,
+                                        single_item_exchange, wrong_item_target)
     from retailflow.address_followups import (advisory_opening, explicit_address_steps, matching_variants,
                                               processing_guarantee_fact, verified_address_reply)
     from retailflow.cancel_goals import GOAL_TOOL, GOAL_PROMPT, validate_goal, goal_progress
@@ -219,6 +220,25 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
     def inventory_request(messages):
         return inventory_order_request([m.content for m in messages
                                         if isinstance(m, HumanMessage) and isinstance(m.content, str)])
+
+    def exchange_scope(messages, session):
+        if any(m.additional_kwargs.get("committed_tool") == "exchange_delivered_order_items" for m in messages):
+            return None
+        customer = []
+        selection = None
+        awaiting_source = False
+        for message in messages:
+            if message.additional_kwargs.get("exchange_source_question"):
+                awaiting_source = True
+            elif isinstance(message, HumanMessage) and isinstance(message.content, str):
+                if awaiting_source:
+                    selection, awaiting_source = message.content, False
+                elif not re.fullmatch(r"(?:(?:please )?use )?(?:my|the) "
+                                      r"(?:original payment method|gift card|credit card|visa|mastercard|paypal)\.?\s*",
+                                      message.content.strip(), re.I):
+                    customer.append(message.content)
+        opening, _ = inventory_order_request(customer)
+        return single_item_exchange(opening, session["business"], session["user_id"], selection)
 
     def read_scope(session):
         last_receipt = session.get("last_receipt") or {}
@@ -264,6 +284,17 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             question = "A cancelled order cannot be reinstated. To record a local handoff, what is your full name and ZIP or email?"
             return {"messages": [AIMessage(content=question, additional_kwargs={"reinstatement_identity": True})],
                     "status": "needs_input", "request": {"fields": ["identity"], "question": question}}
+        exchange = exchange_scope(active_messages, session)
+        if exchange and len(exchange["items"]) > 1:
+            choices = [f"{row['order_id']} ({', '.join(f'{key}: {value}' for key, value in row['options'].items())})"
+                       for row in exchange["items"]]
+            question = "Which item would you like to exchange? " + "; ".join(choices)
+            return {"messages": [AIMessage(content=question, additional_kwargs={"exchange_source_question": True})],
+                    "status": "needs_input", "request": {"fields": ["exchange_items"], "question": question}}
+        if exchange:
+            prompt += ("\nVerified original item for the single exchange: " + json.dumps(exchange, ensure_ascii=False)
+                       + ". Read its order and product if needed. Use available_replacements when present. "
+                         "If that list is empty, a matching adjacent size has not been verified. Keep the separate confirmation.")
         planning = not reinstatement and goal_state is not None and goal_state.get("needs_refresh", True)
         progress = None
         if goal_state is not None and not planning and not reinstatement:
@@ -1035,6 +1066,22 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 result = {"ok": False, "code": "MISSING_USER_INFORMATION",
                           "message": "These identity values were not supplied by the customer. Call ask_user for identity; do not guess.",
                           "fields": ["identity"]}
+            elif name == "exchange_delivered_order_items" and valid_arguments(name, args):
+                session = environment.load_session(thread_id)
+                scope = exchange_scope(active_request(state["messages"]), session)
+                result = None
+                if scope:
+                    items = scope["items"]
+                    if len(items) != 1 or (args["order_id"], args["item_ids"]) != (items[0]["order_id"], [items[0]["item_id"]]):
+                        result = {"ok": False, "code": "INVALID_ARGUMENT",
+                                  "message": "Use only the verified original item for this exchange.", "data": scope}
+                    elif "available_replacements" in scope and (len(args["new_item_ids"]) != 1 or
+                            args["new_item_ids"][0] not in {row["item_id"] for row in scope["available_replacements"]}):
+                        result = {"ok": False, "code": "INVALID_ARGUMENT",
+                                  "message": "The replacement does not match the requested adjacent size and options.",
+                                  "data": scope}
+                if result is None:
+                    result = environment.dispatch_tool(thread_id, name, args)
             elif name in ADDRESS_TOOLS or name == "modify_pending_order_items":
                 active = active_request(state["messages"])
                 opening = request_text(active)
