@@ -19,6 +19,7 @@ def advisory_opening(customer_messages):
         rf"{lookup}|"
         r"You are [\w' -]+\. You live in [\w -]+, [A-Z]{2} \d{5}\.?|"
         r"You are [\w' -]+ in zip ?code \d{5}\.?|"
+        r"You(?: are|'re) [\w' -]+, living in [\w -]+ \d{5}\.?|"
         r"I no longer need (?:it|the order)\.?|I ordered (?:it|the order) by mistake\.?|"
         r"\d{5}\.?|"
         r"ordered by mistake\.?|no longer needed\.?|"

@@ -152,6 +152,16 @@ def _is_text_tool_action(text):
     return isinstance(name, str) and any(tool["function"]["name"] == name for tool in RETAIL_TOOLS)
 
 
+def _requests_cancelled_order_reinstatement(text):
+    return bool(re.fullmatch(
+        r"\s*(?:please )?(?:undo (?:an?|the|my) order I cancel(?:l)?ed|"
+        r"(?:reinstate|restore|reactivate|reopen) (?:my|the|an?) cancel(?:l)?ed order(?: #W\d+)?|"
+        r"undo the cancellation of (?:my|the) order(?: #W\d+)?)"
+        r"(?: and (?:make sure it gets delivered|deliver it|ship it)(?: as soon as possible)?)?[.!]?\s*",
+        text, re.I,
+    ))
+
+
 def _identity_is_grounded(args, messages):
     supplied = "\n".join(m.content for m in messages if isinstance(m, HumanMessage) and isinstance(m.content, str)).casefold()
     return all(re.search(r"(?<!\w)" + re.escape(value.casefold()) + r"(?!\w)", supplied) for value in args.values())
@@ -222,9 +232,12 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             return {"status": "budget_exceeded", "failure_reason": "model_call_budget"}
         prompt = runtime.context.system_prompt.format(system_time=datetime.now(tz=UTC).isoformat())
         session = environment.load_session(thread_id)
-        planning = goal_state is not None and goal_state.get("needs_refresh", True)
+        active_messages = active_request(state["messages"])
+        opening = request_text(active_messages)
+        reinstatement = _requests_cancelled_order_reinstatement(opening)
+        planning = not reinstatement and goal_state is not None and goal_state.get("needs_refresh", True)
         progress = None
-        if goal_state is not None and not planning:
+        if goal_state is not None and not planning and not reinstatement:
             inventory = None
             for message in state["messages"]:
                 if isinstance(message, ToolMessage) and message.name == "get_user_details":
@@ -238,7 +251,6 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             progress = goal_progress(goal_state, session.get("user_id"), session["business"], inventory, committed)
             persist_goal()
             prompt += "\nCancellation goal progress (not write authorization): " + json.dumps(progress)
-        active_messages = active_request(state["messages"])
         address_request = any(
             isinstance(message, HumanMessage) and isinstance(message.content, str)
             and re.search(r"\b(?:address|suite|ship(?:ping)?)\b", message.content, re.I)
@@ -247,7 +259,11 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         )
         outcomes = [message for message in active_messages
                     if message.additional_kwargs.get("application_result")]
-        opening = request_text(active_messages)
+        if reinstatement:
+            next_step = ("Call transfer_to_human_agents to record a simulated handoff."
+                         if session["user_id"] else
+                         "Locate the customer, using ask_user for identity when necessary, before recording a simulated handoff.")
+            prompt += "\nThe requested cancelled order cannot be reinstated or shipped by this application. " + next_step
         cancel_steps, remaining_question = (item_cancel_fallbacks(opening, session["business"], session["user_id"])
                                             if goal_state is None else ([], ""))
         cross_product = None if goal_state is not None or cancel_steps else cross_product_cancel_target(
@@ -488,6 +504,9 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                             json.loads(latest.content).get("code") == "MISSING_USER_INFORMATION")
         information_repair = repair and latest.additional_kwargs["protocol_feedback"] == "information"
         offered = retail_tools_for_session(session) if config.get("state_tool_filter", False) else RETAIL_TOOLS
+        if reinstatement:
+            handoff_tools = IDENTITY_TOOLS | {"ask_user", "transfer_to_human_agents"}
+            offered = [tool for tool in offered if tool["function"]["name"] in handoff_tools]
         if cancel_steps:
             offered = [tool for tool in offered if tool["function"]["name"] not in WRITE_TOOLS]
         if focused_step:
@@ -639,6 +658,13 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             return {"messages": [response], "model_calls": state["model_calls"] + 1, "status": "answered"}
         if not response.tool_calls:
             review_budget = min(max_model_calls, config.get("episode_calls_remaining", max_model_calls))
+            if (reinstatement and not continuation_checked and state["model_calls"] + 1 < review_budget
+                    and not _requests_information(response.content) and not _is_text_tool_action(response.content)):
+                continuation_checked = True
+                feedback = SystemMessage(content=next_step + " Use a native tool, not a normal answer.",
+                                         additional_kwargs={"protocol_feedback": "reinstatement_handoff"})
+                persist(state, [response, feedback])
+                return {"messages": [response, feedback], "model_calls": state["model_calls"] + 1, "status": "repairing"}
             copy_read = bool(remaining_copy_step and isinstance(latest, ToolMessage)
                              and latest.name in {"get_order_details", "get_user_details"}
                              and latest.status == "success")
@@ -839,6 +865,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             return {"messages": messages}
         call = calls[0]
         name, args = call["name"], call["args"]
+        reinstatement = _requests_cancelled_order_reinstatement(request_text(active_request(state["messages"])))
         start = time.perf_counter()
         retries = 0
         copy = None
@@ -881,6 +908,10 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             goal_state.update(plan, targets=targets, needs_refresh=False)
             persist_goal()
             result = {"ok": True, "code": "GOAL_RECORDED", "data": plan}
+            status, request = "running", None
+        elif name == "ask_user" and reinstatement and args.get("fields") != ["identity"]:
+            result = {"ok": False, "code": "INVALID_ARGUMENT",
+                      "message": "A reinstatement handoff does not need order details. Ask only for identity if needed."}
             status, request = "running", None
         elif name == "ask_user":
             if (set(args) == {"fields", "question"} and isinstance(args["question"], str) and args["question"]
@@ -1122,6 +1153,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         metrics["tool_seconds"] += time.perf_counter() - start
         metrics["tool_calls"] += int(not reused_read) + retries
         metadata = {"focused_write_mismatch": True} if focused_mismatch else {}
+        if status == "handed_off" and reinstatement:
+            metadata["reinstatement_handoff"] = True
         if name == "get_user_details" and result["ok"] and result["data"].get("product_order_candidates"):
             lookup_request_id = active_request(state["messages"])[0].id
         if lookup_request_id:

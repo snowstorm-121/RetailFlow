@@ -237,6 +237,8 @@ class RetailRuntime:
                     text = json.loads(messages[-1].content).get("message", "The business policy refused this action.")
                 elif status == "handed_off":
                     text = "A handoff marker was recorded locally; no human agent has been contacted."
+                    if messages[-1].additional_kwargs.get("reinstatement_handoff"):
+                        text = "This application cannot reinstate a cancelled order or arrange its delivery. " + text
                 elif status == "budget_exceeded":
                     text = f"The agent stopped at {failure_reason} before an answer."
                 else:

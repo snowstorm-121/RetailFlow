@@ -1,6 +1,8 @@
 import pytest
 import asyncio
 import json
+import time
+from pathlib import Path
 
 from langchain_core.messages import AIMessage, ToolMessage, messages_to_dict
 
@@ -746,3 +748,46 @@ def test_confirmed_return_continues_to_independent_pending_item_change(tmp_path,
         assert worker.environment.get_order(thread, laptop_order)["status"] == "pending (item modified)"
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("prior_goal", [False, True])
+def test_cancelled_order_reinstatement_recovers_to_authenticated_local_handoff(tmp_path, prior_goal):
+    worker, _, config = runtime(tmp_path, [
+        AIMessage(content="I cannot reopen a cancelled order."),
+        call("ask_user", {"fields": ["order"], "question": "What is the order number?"}, "irrelevant-question"),
+        call("ask_user", {"fields": ["identity"], "question": "What is your name and ZIP?"}, "question"),
+        call("find_user_id_by_name_zip", {"first_name": "Yara", "last_name": "Muller", "zip": "85041"}, "identity"),
+        AIMessage(content="A cancelled order cannot be reopened."),
+        call("transfer_to_human_agents", {"summary": "Customer wants to restore a cancelled order."}, "handoff"),
+    ], cancel_goal_tracking=prior_goal, cancel_goal_activation="explicit_all_pending")
+
+    async def run():
+        thread = "reinstate"
+        if prior_goal:
+            worker._save_runtime(thread, {"started_at": time.time(), "model_calls": 0, "user_turns": 0,
+                                          "cancel_goal": {"needs_refresh": True}})
+        first = await worker.run_turn(thread, {"kind": "message", "text":
+            "Please undo an order I cancelled and make sure it gets delivered as soon as possible."}, config)
+        assert first["status"] == "needs_input"
+        assert first["request"]["fields"] == ["identity"]
+        unrelated = next(message for message in worker.load_messages(thread)
+                         if isinstance(message, ToolMessage) and message.tool_call_id == "irrelevant-question")
+        assert json.loads(unrelated.content)["code"] == "INVALID_ARGUMENT"
+        result = await worker.run_turn(thread, {"kind": "message", "text":
+            "My name is Yara Muller, ZIP 85041."}, config)
+        assert result["status"] == "handed_off"
+        assert "cannot reinstate a cancelled order" in result["text"].lower()
+        assert "no human" in result["text"].lower()
+        trace = json.loads(Path(result["trace_path"]).read_text())
+        assert trace["state_hash_before"] == trace["state_hash_after"]
+        assert worker.environment.pending_proposal(thread) is None
+
+    asyncio.run(run())
+
+
+def test_question_about_reinstatement_does_not_trigger_handoff(tmp_path):
+    worker, _, config = runtime(tmp_path, [AIMessage(content="A cancelled order cannot be restored.")])
+    result = asyncio.run(worker.run_turn("reinstatement-question", {"kind": "message",
+        "text": "Can you tell me whether a cancelled order can be reinstated?"}, config))
+    assert result["status"] == "answered"
+    assert result["usage"]["model_calls"] == 1
