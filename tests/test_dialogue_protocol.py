@@ -750,15 +750,14 @@ def test_confirmed_return_continues_to_independent_pending_item_change(tmp_path,
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("prior_goal", [False, True])
-def test_cancelled_order_reinstatement_recovers_to_authenticated_local_handoff(tmp_path, prior_goal):
+@pytest.mark.parametrize(("prior_goal", "identity_reply"), [
+    (False, "My name is Yara Muller, ZIP 85041."),
+    (True, "Yara Muller, 85041"),
+])
+def test_cancelled_order_reinstatement_recovers_to_authenticated_local_handoff(tmp_path, prior_goal, identity_reply):
     worker, _, config = runtime(tmp_path, [
-        AIMessage(content="I cannot reopen a cancelled order."),
         call("ask_user", {"fields": ["order"], "question": "What is the order number?"}, "irrelevant-question"),
-        call("ask_user", {"fields": ["identity"], "question": "What is your name and ZIP?"}, "question"),
         call("find_user_id_by_name_zip", {"first_name": "Yara", "last_name": "Muller", "zip": "85041"}, "identity"),
-        AIMessage(content="A cancelled order cannot be reopened."),
-        call("transfer_to_human_agents", {"summary": "Customer wants to restore a cancelled order."}, "handoff"),
     ], cancel_goal_tracking=prior_goal, cancel_goal_activation="explicit_all_pending")
 
     async def run():
@@ -770,12 +769,14 @@ def test_cancelled_order_reinstatement_recovers_to_authenticated_local_handoff(t
             "Please undo an order I cancelled and make sure it gets delivered as soon as possible."}, config)
         assert first["status"] == "needs_input"
         assert first["request"]["fields"] == ["identity"]
+        assert first["usage"]["model_calls"] == 0
+        result = await worker.run_turn(thread, {"kind": "message", "text": identity_reply}, config)
+        assert result["status"] == "handed_off"
         unrelated = next(message for message in worker.load_messages(thread)
                          if isinstance(message, ToolMessage) and message.tool_call_id == "irrelevant-question")
         assert json.loads(unrelated.content)["code"] == "INVALID_ARGUMENT"
-        result = await worker.run_turn(thread, {"kind": "message", "text":
-            "My name is Yara Muller, ZIP 85041."}, config)
-        assert result["status"] == "handed_off"
+        assert result["usage"]["tool_attempts"][-1]["origin"] == "application"
+        assert result["usage"]["tool_attempts"][-1]["name"] == "transfer_to_human_agents"
         assert "cannot reinstate a cancelled order" in result["text"].lower()
         assert "no human" in result["text"].lower()
         trace = json.loads(Path(result["trace_path"]).read_text())

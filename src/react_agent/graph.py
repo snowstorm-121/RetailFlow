@@ -205,6 +205,17 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         return advisory_opening([m.content for m in messages
                                  if isinstance(m, HumanMessage) and isinstance(m.content, str)])
 
+    def reinstatement_request(messages):
+        customer = [m.content for m in messages if isinstance(m, HumanMessage) and isinstance(m.content, str)]
+        if not customer or not _requests_cancelled_order_reinstatement(customer[0]):
+            return False
+        if any(m.additional_kwargs.get("reinstatement_identity") for m in messages):
+            bare_identity = (r"[\w.+-]+@[\w.-]+\.[A-Za-z]+|"
+                             r"[A-Za-z][\w'-]*(?: [A-Za-z][\w'-]*)+, (?:ZIP )?\d{5}")
+            customer = [customer[0], *(text for text in customer[1:]
+                                      if not re.fullmatch(bare_identity, text.strip().rstrip("."), re.I))]
+        return bool(advisory_opening(customer))
+
     def inventory_request(messages):
         return inventory_order_request([m.content for m in messages
                                         if isinstance(m, HumanMessage) and isinstance(m.content, str)])
@@ -234,7 +245,25 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         session = environment.load_session(thread_id)
         active_messages = active_request(state["messages"])
         opening = request_text(active_messages)
-        reinstatement = _requests_cancelled_order_reinstatement(opening)
+        reinstatement = reinstatement_request(active_messages)
+        if reinstatement and session["user_id"]:
+            args = {"summary": "Customer requested to reinstate a cancelled order."}
+            start = time.perf_counter()
+            result = environment.dispatch_tool(thread_id, "transfer_to_human_agents", args)
+            metrics["tool_seconds"] += time.perf_counter() - start
+            metrics["tool_calls"] += 1
+            metrics["tool_attempts"].append({"name": "transfer_to_human_agents", "args": args, "code": result["code"],
+                                             "attempt": 1, "origin": "application"})
+            message = ToolMessage(content=json.dumps(result), name="transfer_to_human_agents",
+                                  tool_call_id=f"application-handoff-{active_messages[0].id}",
+                                  status="success" if result["ok"] else "error",
+                                  additional_kwargs={"reinstatement_handoff": True})
+            return {"messages": [message], "status": "handed_off" if result["ok"] else "failed",
+                    "failure_reason": None if result["ok"] else result["code"]}
+        if reinstatement and not any(m.additional_kwargs.get("reinstatement_identity") for m in active_messages):
+            question = "A cancelled order cannot be reinstated. To record a local handoff, what is your full name and ZIP or email?"
+            return {"messages": [AIMessage(content=question, additional_kwargs={"reinstatement_identity": True})],
+                    "status": "needs_input", "request": {"fields": ["identity"], "question": question}}
         planning = not reinstatement and goal_state is not None and goal_state.get("needs_refresh", True)
         progress = None
         if goal_state is not None and not planning and not reinstatement:
@@ -260,10 +289,9 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         outcomes = [message for message in active_messages
                     if message.additional_kwargs.get("application_result")]
         if reinstatement:
-            next_step = ("Call transfer_to_human_agents to record a simulated handoff."
-                         if session["user_id"] else
-                         "Locate the customer, using ask_user for identity when necessary, before recording a simulated handoff.")
-            prompt += "\nThe requested cancelled order cannot be reinstated or shipped by this application. " + next_step
+            next_step = ("Use a native identity lookup with the customer-supplied email or name and ZIP. "
+                         "Ask only for identity if necessary; the application records the local handoff after verification.")
+            prompt += "\n" + next_step
         cancel_steps, remaining_question = (item_cancel_fallbacks(opening, session["business"], session["user_id"])
                                             if goal_state is None else ([], ""))
         cross_product = None if goal_state is not None or cancel_steps else cross_product_cancel_target(
@@ -505,7 +533,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         information_repair = repair and latest.additional_kwargs["protocol_feedback"] == "information"
         offered = retail_tools_for_session(session) if config.get("state_tool_filter", False) else RETAIL_TOOLS
         if reinstatement:
-            handoff_tools = IDENTITY_TOOLS | {"ask_user", "transfer_to_human_agents"}
+            handoff_tools = IDENTITY_TOOLS | {"ask_user"}
             offered = [tool for tool in offered if tool["function"]["name"] in handoff_tools]
         if cancel_steps:
             offered = [tool for tool in offered if tool["function"]["name"] not in WRITE_TOOLS]
@@ -865,7 +893,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             return {"messages": messages}
         call = calls[0]
         name, args = call["name"], call["args"]
-        reinstatement = _requests_cancelled_order_reinstatement(request_text(active_request(state["messages"])))
+        reinstatement = reinstatement_request(active_request(state["messages"]))
         start = time.perf_counter()
         retries = 0
         copy = None
@@ -1153,8 +1181,6 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
         metrics["tool_seconds"] += time.perf_counter() - start
         metrics["tool_calls"] += int(not reused_read) + retries
         metadata = {"focused_write_mismatch": True} if focused_mismatch else {}
-        if status == "handed_off" and reinstatement:
-            metadata["reinstatement_handoff"] = True
         if name == "get_user_details" and result["ok"] and result["data"].get("product_order_candidates"):
             lookup_request_id = active_request(state["messages"])[0].id
         if lookup_request_id:
