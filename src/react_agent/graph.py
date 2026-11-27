@@ -152,6 +152,19 @@ def _is_text_tool_action(text):
     return isinstance(name, str) and any(tool["function"]["name"] == name for tool in RETAIL_TOOLS)
 
 
+def _reported_missing_tool(text):
+    if not isinstance(text, str) or not text.lstrip().startswith("{"):
+        return None
+    try:
+        response = json.loads(text)
+    except ValueError:
+        return None
+    if response.get("error") != "tool_name_not_found" or not isinstance(response.get("message"), str):
+        return None
+    match = re.fullmatch(r"The tool '([a-z_]+)' was not found in the available tools list\.?", response["message"])
+    return match[1] if match else None
+
+
 def _requests_cancelled_order_reinstatement(text):
     return bool(re.fullmatch(
         r"\s*(?:please )?(?:undo (?:an?|the|my) order I cancel(?:l)?ed|"
@@ -641,6 +654,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 prompt += (" Handle the independently requested return first if its order, item selection and refund "
                            "method are verified. Honor dependencies stated anywhere in the customer request. "
                            "If the return itself needs clarification, use ask_user.")
+            if missing_tool := latest.additional_kwargs.get("missing_native_tool"):
+                prompt += f" The tool {missing_tool} is available in this request; use the native API."
             examples = []
             payload = {"events": events}
             if progress is not None:
@@ -765,6 +780,10 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                 return {"messages": [response], "model_calls": state["model_calls"] + 1,
                         "status": "failed", "failure_reason": "information_request_not_structured"}
             text = response.content
+            missing_tool = _reported_missing_tool(text)
+            if missing_tool and missing_tool not in input_record["tool_names"]:
+                return {"messages": [response], "model_calls": state["model_calls"] + 1,
+                        "status": "failed", "failure_reason": "model_reported_unavailable_tool"}
             address_confirmation = (isinstance(text, str) and re.search(r"\b(?:address|suite|shipping)\b", text, re.I)
                                     and re.search(r"\b(?:change|chang(?:ing|ed)|updat\w*|modify|proceed)\b", text, re.I))
             proposal_missing = (isinstance(text, str) and session.get("user_id")
@@ -797,6 +816,8 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             )
             kind = ("empty" if not text else "proposal" if return_confirmation or (proposal_missing and explicit_confirmation) else
                     "information" if _requests_information(text) else "proposal" if proposal_missing else None)
+            if missing_tool:
+                kind = "proposal" if missing_tool in WRITE_TOOLS else "tool_binding"
             receipts = [json.loads(message.content.removeprefix("Application outcome: ")) for message in outcomes
                         if message.additional_kwargs.get("committed_tool")]
             if (kind in {None, "proposal"} and account_copy_retry_draft_id
@@ -830,6 +851,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                             "status": "needs_confirmation", "request": proposal}
             if kind:
                 reason = {"empty": "empty_model_response", "proposal": "proposal_not_created",
+                          "tool_binding": "model_reported_unavailable_tool",
                           "information": "information_request_not_structured"}[kind]
                 if metrics["dialogue_repairs"] >= 1:
                     return {"messages": [response], "model_calls": state["model_calls"] + 1,
@@ -844,9 +866,14 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                                 "The application obtains confirmation. Do not claim completion or substitute a different action.",
                     "empty": "The previous model response was empty. Continue with a native tool call if needed, "
                              "or give an accurate nonempty final answer. Do not invent customer details.",
+                    "tool_binding": "The listed native tools are available. Use a native tool for the current step.",
                 }[kind]
+                if missing_tool:
+                    feedback_text = (f"{missing_tool} was offered. Your previous draft did not execute a tool. "
+                                     "Continue with an appropriate native call using verified evidence.")
                 feedback = SystemMessage(content=feedback_text, additional_kwargs={
                     "protocol_feedback": kind,
+                    **({"missing_native_tool": missing_tool} if missing_tool else {}),
                     **({"return_confirmation_in_prose": True} if return_confirmation else {}),
                 })
                 persist(state, [response, feedback])

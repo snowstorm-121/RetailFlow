@@ -792,3 +792,35 @@ def test_question_about_reinstatement_does_not_trigger_handoff(tmp_path):
         "text": "Can you tell me whether a cancelled order can be reinstated?"}, config))
     assert result["status"] == "answered"
     assert result["usage"]["model_calls"] == 1
+
+
+@pytest.mark.parametrize("native_finish", [True, False])
+def test_reported_missing_offered_tool_gets_one_native_recovery(tmp_path, native_finish):
+    order = "#W2378156"
+    args = {"order_id": order, "item_ids": ["4202497723"], "payment_method_id": "credit_card_9513926"}
+    fake_error = json.dumps({"error": "tool_name_not_found",
+                             "message": "The tool 'return_delivered_order_items' was not found in the available tools list."})
+    worker, model, config = runtime(tmp_path, [
+        call("find_user_id_by_name_zip", {"first_name": "Yusuf", "last_name": "Rossi", "zip": "19122"}, "identity"),
+        call("get_order_details", {"order_id": order}, "order"),
+        AIMessage(content=fake_error),
+        call("return_delivered_order_items", args, "return") if native_finish else AIMessage(content=fake_error),
+    ], isolated_proposal_repair=True)
+    result = asyncio.run(worker.run_turn("fake-error", {"kind": "message", "text":
+        f"Yusuf Rossi ZIP 19122. Return the headphones in {order} to the original payment method."}, config))
+    assert result["status"] == ("needs_confirmation" if native_finish else "failed")
+    assert result["usage"]["dialogue_repairs"] == 1
+    assert fake_error not in model.inputs[-1][-1].content
+    assert worker.environment.get_order("fake-error", order)["status"] == "delivered"
+    assert (worker.environment.pending_proposal("fake-error") is not None) == native_finish
+
+
+def test_reported_unknown_tool_does_not_enable_it(tmp_path):
+    fake_error = json.dumps({"error": "tool_name_not_found",
+                             "message": "The tool 'update_inventory' was not found in the available tools list."})
+    worker, _, config = runtime(tmp_path, [AIMessage(content=fake_error)], isolated_proposal_repair=True)
+    result = asyncio.run(worker.run_turn("unknown-tool", {"kind": "message", "text": "Could you help me?"}, config))
+    assert result["status"] == "failed"
+    assert result["failure_reason"] == "model_reported_unavailable_tool"
+    assert result["usage"]["model_calls"] == 1
+    assert result["usage"]["tool_calls"] == 0
