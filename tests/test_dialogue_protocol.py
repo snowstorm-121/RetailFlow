@@ -845,9 +845,9 @@ def test_text_proposal_draft_requires_fresh_native_call_and_confirmation(tmp_pat
         AIMessage(content=f"The confirmed operation for {order} is recorded."),
     ])
     customer = f"{identity['first_name']} {identity['last_name']}, ZIP {identity['zip']}"
-    detail = "to the original payment method" if action == "Return" else "because I ordered by mistake"
-    result = asyncio.run(worker.run_turn("draft", {"kind": "message", "text":
-        f"{customer}. {action} {order} {detail}."}, config))
+    instruction = (f"In {order}, return the headphones to the original payment method." if action == "Return"
+                   else f"Cancel {order} because I ordered by mistake.")
+    result = asyncio.run(worker.run_turn("draft", {"kind": "message", "text": f"{customer}. {instruction}"}, config))
     assert result["status"] == "needs_confirmation"
     assert result["usage"]["dialogue_repairs"] == 1
     assert result["request"]["args"] == args
@@ -902,3 +902,32 @@ def test_text_proposal_native_retry_can_discover_an_ineligible_order(tmp_path):
     assert result["usage"]["dialogue_repairs"] == 1
     assert not any("cancellation_proposal" in message.content for message in model.inputs[-1])
     assert worker.environment.pending_proposal("ineligible-draft") is None
+
+
+def test_text_proposal_recovery_keeps_exchange_intent_after_identity_reply(tmp_path):
+    order = "#W3388163"
+    args = {"order_id": order, "item_ids": ["9354168549"], "new_item_ids": ["2060066974"],
+            "payment_method_id": "paypal_5334408"}
+    worker, _, config = runtime(tmp_path, [
+        call("ask_user", {"fields": ["identity"], "question": "What is your email?"}, "ask"),
+        call("find_user_id_by_email", {"email": "sofia.thomas3069@example.com"}, "identity"),
+        call("get_order_details", {"order_id": order}, "order"),
+        call("get_product_details", {"product_id": "9523456873"}, "catalog"),
+        AIMessage(content=json.dumps({"exchange_proposal": args, "confirmation_required": True})),
+        call("exchange_delivered_order_items", args, "exchange"),
+    ])
+
+    async def run():
+        first = await worker.run_turn("exchange-draft", {"kind": "message", "text":
+            "The T-shirt I received is too large. Exchange it for one size smaller. "
+            "Keep it cotton, and I prefer black if available."}, config)
+        assert first["status"] == "needs_input"
+        result = await worker.run_turn("exchange-draft", {"kind": "message", "text":
+            "You name is Sofia Thomas and your emails are sofia.thomas3019@example.com and sofia.thomas3069@example.com."},
+            config)
+        assert result["status"] == "needs_confirmation"
+        assert result["request"]["args"] == args
+        assert result["usage"]["dialogue_repairs"] == 1
+        assert worker.environment.get_order("exchange-draft", order)["status"] == "delivered"
+
+    asyncio.run(run())

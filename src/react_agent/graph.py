@@ -758,9 +758,10 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             review_budget = min(max_model_calls, config.get("episode_calls_remaining", max_model_calls))
             if text_proposal:
                 verb, tool = text_proposal
+                request_pattern = r"(?:^|[.!?;]\s+)(?:in (?:order )?#W\d+,\s+)?(?:please\s+)?(?:" + verb + r")\b"
                 if (proposal_repair or metrics["dialogue_repairs"] >= 1 or state["model_calls"] + 1 >= review_budget
                         or not session.get("user_id") or tool not in input_record["tool_names"]
-                        or not re.search(r"(?:^|[.!?;]\s+)(?:please\s+)?(?:" + verb + r")\b", opening, re.I)):
+                        or not re.search(request_pattern, inventory_text, re.I)):
                     return {"messages": [response], "model_calls": state["model_calls"] + 1,
                             "status": "failed", "failure_reason": "proposal_not_created"}
                 metrics["dialogue_repairs"] += 1
