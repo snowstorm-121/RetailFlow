@@ -133,23 +133,41 @@ def _requests_information(text):
 
 
 
-def _is_text_tool_action(text):
-    """Recognize the observed malformed action envelope; never execute its contents."""
+def _text_json_object(text):
     if not isinstance(text, str):
-        return False
+        return {}
     candidate = text.strip()
     if candidate.startswith("```json\n") and candidate.endswith("```"):
         candidate = candidate[8:-3].strip()
+    if not candidate.startswith("{"):
+        return {}
     try:
-        value = json.loads(candidate)
+        return json.loads(candidate)
     except ValueError:
-        return False
-    if not isinstance(value, dict):
-        return False
+        return {}
+
+
+def _is_text_tool_action(text):
+    """Recognize the observed malformed action envelope; never execute its contents."""
+    value = _text_json_object(text)
     name = value.get("action")
     if name is None and isinstance(value.get("arguments"), dict):
         name = value.get("name")
     return isinstance(name, str) and any(tool["function"]["name"] == name for tool in RETAIL_TOOLS)
+
+
+def _text_proposal_operation(text):
+    """Classify a draft by shape without forwarding any of its argument values."""
+    value = _text_json_object(text)
+    operations = [
+        (verb, tool) for wrapper, verb, tool in (
+            ("cancellation_proposal", "cancel", "cancel_pending_order"),
+            ("return_proposal", "return", "return_delivered_order_items"),
+            ("exchange_proposal", "exchange", "exchange_delivered_order_items"),
+            ("modification_proposal", "modify|change", "modify_pending_order_items"),
+        ) if valid_arguments(tool, value.get(wrapper))
+    ]
+    return operations[0] if len(operations) == 1 else None
 
 
 def _reported_missing_tool(text):
@@ -630,9 +648,10 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             visible = [HumanMessage(content=json.dumps(payload, ensure_ascii=False),
                                     additional_kwargs={"protocol_retry_input": True})]
             model_messages = [SystemMessage(content=prompt), *visible]
+        draft_repair = repair == "proposal" and latest.additional_kwargs.get("text_proposal_draft")
         proposal_repair_active = proposal_repair_active or (
-            repair == "proposal" and config.get("isolated_proposal_repair", False))
-        proposal_repair = proposal_repair_active
+            repair == "proposal" and not draft_repair and config.get("isolated_proposal_repair", False))
+        proposal_repair = proposal_repair_active or draft_repair
         if proposal_repair:
             events = []
             for message in visible:
@@ -707,6 +726,10 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             response = await model.ainvoke(model_messages, stream=False)
         finally:
             metrics["model_seconds"] += time.perf_counter() - start
+        text_action = not response.tool_calls and _is_text_tool_action(response.content)
+        text_proposal = _text_proposal_operation(response.content) if not response.tool_calls and not text_action else None
+        if text_proposal:
+            response.additional_kwargs["unverified_proposal_draft"] = True
         persist(state, [response])
         usage = response.usage_metadata
         if usage:
@@ -726,14 +749,30 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
             return {"messages": [response], "model_calls": state["model_calls"] + 1,
                     "status": "failed", "failure_reason": "cancel_goal_not_registered"}
         if repair == "receipt_review":
-            if response.tool_calls or not isinstance(response.content, str) or not response.content.strip() or _is_text_tool_action(response.content):
+            if (response.tool_calls or not isinstance(response.content, str) or not response.content.strip()
+                    or text_action or text_proposal):
                 return {"messages": [response], "model_calls": state["model_calls"] + 1,
                         "status": "failed", "failure_reason": "receipt_review_invalid_response"}
             return {"messages": [response], "model_calls": state["model_calls"] + 1, "status": "answered"}
         if not response.tool_calls:
             review_budget = min(max_model_calls, config.get("episode_calls_remaining", max_model_calls))
+            if text_proposal:
+                verb, tool = text_proposal
+                if (proposal_repair or metrics["dialogue_repairs"] >= 1 or state["model_calls"] + 1 >= review_budget
+                        or not session.get("user_id") or tool not in input_record["tool_names"]
+                        or not re.search(r"(?:^|[.!?;]\s+)(?:please\s+)?(?:" + verb + r")\b", opening, re.I)):
+                    return {"messages": [response], "model_calls": state["model_calls"] + 1,
+                            "status": "failed", "failure_reason": "proposal_not_created"}
+                metrics["dialogue_repairs"] += 1
+                feedback = SystemMessage(
+                    content="The text draft did not stage a proposal. Rebuild the next step using the customer request, "
+                            "verified results and a native tool call.",
+                    additional_kwargs={"protocol_feedback": "proposal", "text_proposal_draft": True},
+                )
+                persist(state, [response, feedback])
+                return {"messages": [response, feedback], "model_calls": state["model_calls"] + 1, "status": "repairing"}
             if (reinstatement and not continuation_checked and state["model_calls"] + 1 < review_budget
-                    and not _requests_information(response.content) and not _is_text_tool_action(response.content)):
+                    and not _requests_information(response.content) and not text_action):
                 continuation_checked = True
                 feedback = SystemMessage(content=next_step + " Use a native tool, not a normal answer.",
                                          additional_kwargs={"protocol_feedback": "reinstatement_handoff"})
@@ -770,7 +809,7 @@ def make_retail_graph(environment, thread_id, model_factory, metrics, max_model_
                                          additional_kwargs={"protocol_feedback": "proposal"})
                 persist(state, [response, feedback])
                 return {"messages": [response, feedback], "model_calls": state["model_calls"] + 1, "status": "repairing"}
-            if _is_text_tool_action(response.content):
+            if text_action:
                 return {"messages": [response], "model_calls": state["model_calls"] + 1,
                         "status": "failed", "failure_reason": "non_native_tool_action"}
             if proposal_repair:

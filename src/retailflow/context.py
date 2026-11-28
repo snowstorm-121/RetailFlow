@@ -71,7 +71,8 @@ def _blocks(messages, structured=True, products=None, lookup_request_id=None):
                 and index != len(messages) - 1):
             index += 1
             continue
-        if message.id in superseded or isinstance(message, ToolMessage):
+        if (message.id in superseded or isinstance(message, ToolMessage)
+                or message.additional_kwargs.get("unverified_proposal_draft")):
             index += 1
             continue
         if isinstance(message, SystemMessage) and not any(message.additional_kwargs.get(key)

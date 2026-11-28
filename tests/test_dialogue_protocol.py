@@ -824,3 +824,81 @@ def test_reported_unknown_tool_does_not_enable_it(tmp_path):
     assert result["failure_reason"] == "model_reported_unavailable_tool"
     assert result["usage"]["model_calls"] == 1
     assert result["usage"]["tool_calls"] == 0
+
+
+@pytest.mark.parametrize(("action", "tool", "args", "identity", "status"), [
+    ("Return", "return_delivered_order_items",
+     {"order_id": "#W2378156", "item_ids": ["4202497723"], "payment_method_id": "credit_card_9513926"},
+     {"first_name": "Yusuf", "last_name": "Rossi", "zip": "19122"}, "delivered"),
+    ("Cancel", "cancel_pending_order", {"order_id": "#W5056519", "reason": "ordered by mistake"},
+     {"first_name": "Yara", "last_name": "Muller", "zip": "85041"}, "pending"),
+])
+def test_text_proposal_draft_requires_fresh_native_call_and_confirmation(tmp_path, action, tool, args, identity, status):
+    order = args["order_id"]
+    wrapper = {"Return": "return_proposal", "Cancel": "cancellation_proposal"}[action]
+    draft = json.dumps({wrapper: {**args, "order_id": "#W9999999"}, "confirmation_required": True})
+    worker, model, config = runtime(tmp_path, [
+        call("find_user_id_by_name_zip", identity, "identity"),
+        call("get_order_details", {"order_id": order}, "order"),
+        AIMessage(content=f"```json\n{draft}\n```" if action == "Return" else draft),
+        call(tool, args, "native"),
+        AIMessage(content=f"The confirmed operation for {order} is recorded."),
+    ])
+    customer = f"{identity['first_name']} {identity['last_name']}, ZIP {identity['zip']}"
+    detail = "to the original payment method" if action == "Return" else "because I ordered by mistake"
+    result = asyncio.run(worker.run_turn("draft", {"kind": "message", "text":
+        f"{customer}. {action} {order} {detail}."}, config))
+    assert result["status"] == "needs_confirmation"
+    assert result["usage"]["dialogue_repairs"] == 1
+    assert result["request"]["args"] == args
+    assert worker.environment.get_order("draft", order)["status"] == status
+    assert worker.environment.receipt_for_proposal("draft", result["request"]["proposal_id"]) is None
+    assert all("#W9999999" not in message.content for message in model.inputs[-1])
+    assert any("#W9999999" in message.content for message in worker.load_messages("draft"))
+    events = json.loads(model.inputs[-1][-1].content)["events"]
+    assert any(event.get("name") == "get_order_details" for event in events)
+    final = asyncio.run(worker.run_turn("draft", {"kind": "confirmation", "accepted": True,
+        "proposal_id": result["request"]["proposal_id"]}, config))
+    assert final["status"] == "answered"
+    assert len(model.inputs) == 5
+    assert all("#W9999999" not in message.content for message in model.inputs[-1])
+
+
+@pytest.mark.parametrize(("customer_request", "limit", "repair_count"), [
+    ("Cancel #W5056519 because I ordered by mistake.", 6, 1),
+    ("Cancel #W5056519 because I ordered by mistake.", 2, 0),
+    ("What is the status of order #W5056519?", 6, 0),
+])
+def test_text_proposal_draft_cannot_stage_a_write_on_its_own(tmp_path, customer_request, limit, repair_count):
+    draft = AIMessage(content=json.dumps({"cancellation_proposal": {
+        "order_id": "#W5056519", "reason": "ordered by mistake"}}))
+    worker, _, config = runtime(tmp_path, [
+        call("find_user_id_by_name_zip", {"first_name": "Yara", "last_name": "Muller", "zip": "85041"}, "identity"),
+        draft, draft.model_copy(),
+    ], max_model_calls_per_turn=limit)
+    result = asyncio.run(worker.run_turn("unconfirmed-draft", {"kind": "message", "text":
+        f"Yara Muller ZIP 85041. {customer_request}"}, config))
+    assert result["status"] == "failed"
+    assert result["failure_reason"] == "proposal_not_created"
+    assert result["usage"]["dialogue_repairs"] == repair_count
+    assert result["usage"]["model_calls"] == 2 + repair_count
+    assert worker.environment.pending_proposal("unconfirmed-draft") is None
+    assert worker.environment.get_order("unconfirmed-draft", "#W5056519")["status"] == "pending"
+
+
+def test_text_proposal_native_retry_can_discover_an_ineligible_order(tmp_path):
+    order = "#W2378156"
+    answer = f"Order {order} has already been delivered and is past the cancellation stage."
+    worker, model, config = runtime(tmp_path, [
+        call("find_user_id_by_name_zip", {"first_name": "Yusuf", "last_name": "Rossi", "zip": "19122"}, "identity"),
+        AIMessage(content=json.dumps({"cancellation_proposal": {"order_id": order, "reason": "ordered by mistake"}})),
+        call("get_order_details", {"order_id": order}, "verify-order"),
+        AIMessage(content=answer),
+    ], isolated_proposal_repair=True)
+    result = asyncio.run(worker.run_turn("ineligible-draft", {"kind": "message", "text":
+        f"Yusuf Rossi, ZIP 19122. Cancel {order} because I ordered by mistake."}, config))
+    assert result["status"] == "answered"
+    assert result["text"] == answer
+    assert result["usage"]["dialogue_repairs"] == 1
+    assert not any("cancellation_proposal" in message.content for message in model.inputs[-1])
+    assert worker.environment.pending_proposal("ineligible-draft") is None
